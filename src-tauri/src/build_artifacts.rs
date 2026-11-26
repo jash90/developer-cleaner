@@ -116,11 +116,50 @@ fn has_markers(kind: ArtifactKind, path: &Path, parent: &Path) -> bool {
                     ],
                 )
         }
+        // `~/.expo` is Expo CLI's own global folder, login session (`state.json`) included; a
+        // project's `.expo` is what `expo start` writes. Only an Expo project beside it counts —
+        // any `package.json` would let a stray one in the home folder through.
         ArtifactKind::ExpoState => {
-            any_file(parent, &["app.json", "app.config.js", "app.config.ts"])
-                || parent.join("package.json").is_file()
+            !path.join("state.json").exists()
+                && (any_file(
+                    parent,
+                    &[
+                        "app.json",
+                        "app.config.js",
+                        "app.config.ts",
+                        "app.config.json",
+                    ],
+                ) || depends_on(&parent.join("package.json"), "expo"))
         }
     }
+}
+
+/// Whether a `package.json` lists `package` in `dependencies` or `devDependencies`.
+fn depends_on(package_json: &Path, package: &str) -> bool {
+    let Ok(content) = fs::read_to_string(package_json) else {
+        return false;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return false;
+    };
+    ["dependencies", "devDependencies"]
+        .iter()
+        .any(|key| parsed.get(key).and_then(|deps| deps.get(package)).is_some())
+}
+
+/// The home folder holds tools' global state (`~/.expo`, `~/.turbo`, …), never a project's build
+/// output, even when a stray `~/package.json` makes it look like a project.
+fn is_home_folder(dir: &Path) -> bool {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    home.is_some_and(|home| is_same_dir(dir, Path::new(&home)))
+}
+
+fn is_same_dir(dir: &Path, home: &Path) -> bool {
+    dir == home
+        || fs::canonicalize(dir)
+            .ok()
+            .zip(fs::canonicalize(home).ok())
+            .is_some_and(|(dir, home)| dir == home)
 }
 
 /// The kind `path` would be offered as, judged by name and markers only — no Git, no symlink
@@ -162,6 +201,12 @@ pub(crate) fn artifact_rejection(path: &Path) -> Option<String> {
     let Some(parent) = path.parent() else {
         return Some("Refusing to delete a filesystem root".to_string());
     };
+    if is_home_folder(parent) {
+        return Some(
+            "Refusing to delete: folders directly in the home folder are tools' global state"
+                .to_string(),
+        );
+    }
     if !has_markers(kind, path, parent) {
         return Some(missing_marker_reason(kind).to_string());
     }
@@ -188,7 +233,9 @@ fn missing_marker_reason(kind: ArtifactKind) -> &'static str {
         ArtifactKind::TurboCache => "Refusing to delete: no package.json or turbo.json beside it",
         ArtifactKind::AndroidCxx => "Refusing to delete: no build.gradle beside it",
         ArtifactKind::Coverage => "Refusing to delete: no coverage report inside",
-        ArtifactKind::ExpoState => "Refusing to delete: no Expo project beside it",
+        ArtifactKind::ExpoState => {
+            "Refusing to delete: no Expo project beside it, or Expo CLI's global state inside"
+        }
     }
 }
 
@@ -262,7 +309,9 @@ pub async fn delete_build_artifacts(paths: Vec<String>) -> Vec<DeleteResult> {
 
 #[cfg(test)]
 mod tests {
-    use super::{artifact_rejection, candidate_kind, delete_checked, is_offered, ArtifactKind};
+    use super::{
+        artifact_rejection, candidate_kind, delete_checked, is_offered, is_same_dir, ArtifactKind,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -309,7 +358,10 @@ mod tests {
     /// One project per kind, each with the markers its tool leaves.
     fn every_kind(root: &Path) -> Vec<(ArtifactKind, PathBuf)> {
         let web = root.join("web");
-        write(&web.join("package.json"), "{}");
+        write(
+            &web.join("package.json"),
+            r#"{"dependencies":{"expo":"~52.0.0"}}"#,
+        );
         write(&web.join("nx.json"), "{}");
         write(&web.join(".next/BUILD_ID"), "abc");
         write(&web.join(".nx/cache/run.json"), "{}");
@@ -413,6 +465,48 @@ mod tests {
             assert!(!delete_one(path).success);
             assert!(path.exists());
         }
+    }
+
+    #[test]
+    fn refuses_expo_global_state_and_non_expo_projects() {
+        let root = temp_root("expo-lookalikes");
+        let _cleanup = TestDirectory(root.clone());
+        // `~/.expo` with a stray `~/package.json` beside it: Expo CLI's login lives here.
+        let home = root.join("home");
+        write(
+            &home.join("package.json"),
+            r#"{"dependencies":{"expo":"~52.0.0"}}"#,
+        );
+        write(&home.join(".expo/state.json"), r#"{"auth":{}}"#);
+        assert_eq!(candidate_kind(&home.join(".expo")), None);
+        // A `.expo` beside a package that does not use Expo.
+        let plain = root.join("plain");
+        write(
+            &plain.join("package.json"),
+            r#"{"dependencies":{"react":"19"}}"#,
+        );
+        write(&plain.join(".expo/devices.json"), "{}");
+        assert_eq!(candidate_kind(&plain.join(".expo")), None);
+        // An Expo project with no dependency entry still counts through its app config.
+        let configured = root.join("configured");
+        write(&configured.join("app.json"), r#"{"expo":{}}"#);
+        write(&configured.join(".expo/devices.json"), "{}");
+        assert_eq!(
+            candidate_kind(&configured.join(".expo")),
+            Some(ArtifactKind::ExpoState)
+        );
+    }
+
+    #[test]
+    fn the_home_folder_is_never_a_project() {
+        let root = temp_root("home-folder");
+        let _cleanup = TestDirectory(root.clone());
+        let home = root.join("home");
+        write(&home.join("package.json"), "{}");
+        write(&home.join(".turbo/daemon/x.log"), "log");
+        assert!(is_same_dir(&home, &home));
+        assert!(is_same_dir(&home, &home.join("..").join("home")));
+        assert!(!is_same_dir(&root, &home));
     }
 
     #[test]

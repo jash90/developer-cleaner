@@ -349,12 +349,22 @@ fn is_skipped_dir(path: &Path) -> bool {
 /// The project a build artifact belongs to. `app/ios/Pods` and `app/android/app/.cxx` belong to
 /// `app`, not to `ios` or `app`'s inner `app` module.
 fn get_artifact_project(path: &Path) -> String {
-    const PLATFORM_DIRS: &[&str] = &["ios", "android", "app", "src-tauri", "macos"];
-    path.ancestors()
+    const PLATFORM_DIRS: &[&str] = &["ios", "android", "src-tauri", "macos"];
+    let names: Vec<&str> = path
+        .ancestors()
         .skip(1)
-        .filter_map(|ancestor| ancestor.file_name().and_then(|name| name.to_str()))
-        .find(|name| !PLATFORM_DIRS.contains(name))
-        .unwrap_or("Unknown")
+        .map_while(|ancestor| ancestor.file_name().and_then(|name| name.to_str()))
+        .collect();
+    names
+        .iter()
+        .enumerate()
+        .find(|&(index, name)| {
+            // `app` is skipped only as Android's module folder (`android/app`): a project can
+            // itself be called `app`.
+            let android_module = *name == "app" && names.get(index + 1) == Some(&"android");
+            !PLATFORM_DIRS.contains(name) && !android_module
+        })
+        .map_or("Unknown", |(_, name)| *name)
         .to_string()
 }
 
@@ -719,7 +729,7 @@ pub(crate) fn rejected(path: String, reason: String) -> DeleteResult {
 /// Delete each path that `rejection` lets through, measuring what was freed.
 ///
 /// `rejection` is the per-kind guard — [`delete_target_rejection`] for `node_modules`,
-/// `cargo_target_rejection` for Rust build folders — and runs immediately before the delete.
+/// `artifact_rejection` for build folders — and runs immediately before the delete.
 pub(crate) fn delete_checked(
     paths: Vec<String>,
     rejection: fn(&Path) -> Option<String>,
@@ -954,6 +964,16 @@ mod tests {
     /// `Pods` and the dot-directories are pruned by the skip rules, so the walk must meet them
     /// as build artifacts first — and still never descend into them for `node_modules`.
     #[test]
+    fn artifact_rows_name_the_project_even_when_it_is_called_app() {
+        let p = |s: &str| super::get_artifact_project(Path::new(s));
+        assert_eq!(p("/Users/dev/Projects/app/.next"), "app");
+        assert_eq!(p("/Users/dev/Projects/shop/android/app/.cxx"), "shop");
+        assert_eq!(p("/Users/dev/Projects/shop/ios/Pods"), "shop");
+        assert_eq!(p("/Users/dev/Projects/app/android/app/.cxx"), "app");
+        assert_eq!(p("/Users/dev/Projects/tool/src-tauri/target"), "tool");
+    }
+
+    #[test]
     fn scan_offers_pods_and_hidden_build_folders() {
         let root = temp_root("hidden-artifacts");
         let _cleanup = TestDirectory(root.clone());
@@ -964,7 +984,10 @@ mod tests {
         };
         write("mobile/ios/Podfile", "platform :ios");
         write("mobile/ios/Pods/Manifest.lock", "PODS:");
-        write("mobile/package.json", "{}");
+        write(
+            "mobile/package.json",
+            r#"{"dependencies":{"expo":"~52.0.0"}}"#,
+        );
         write("mobile/.expo/devices.json", "{}");
         write("web/package.json", "{}");
         write("web/.next/BUILD_ID", "abc");
