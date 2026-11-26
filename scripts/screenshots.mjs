@@ -229,6 +229,7 @@ const diskSpace = {
 const LAST_SCAN_MS = 48_000;
 
 const fixtures = {
+  home: HOME,
   scanPath: PROJECTS,
   diskSpace,
   lastScanMs: LAST_SCAN_MS,
@@ -261,6 +262,8 @@ function installTauriMock(data) {
 
   const handlers = {
     'plugin:dialog|open': () => data.scanPath,
+    // homeDir(), so paths under the fictional home folder read as ~/….
+    'plugin:path|resolve_directory': () => data.home,
     scan_for_node_modules: async ({ path }) => {
       await wait(150);
       if (window.__folderScanHold) await window.__folderScanHold;

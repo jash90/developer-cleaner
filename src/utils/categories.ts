@@ -122,9 +122,26 @@ export function isPruneTarget(target: { cleanup: { type: string } }): boolean {
   return target.cleanup.type === 'external_command';
 }
 
-/** `~/…` for paths under the home folder, which is how people read them. */
-export function shortenHome(path: string): string {
-  return path.replace(/^\/Users\/[^/]+(?=\/|$)/, '~').replace(/^\/home\/[^/]+(?=\/|$)/, '~');
+let homeFolder: string | null = null;
+
+/** Set once at startup from the OS; until then, or if that fails, paths are shown in full. */
+export function setHomeFolder(home: string | null): void {
+  homeFolder = home;
+}
+
+/**
+ * `~/…` for paths under the user's own home folder, which is how people read them. Anything
+ * else keeps its full path: `/Users/Shared`, other users' folders, a sibling like `/Users/anna2`.
+ */
+export function shortenHome(path: string, home: string | null = homeFolder): string {
+  const base = home?.replace(/[/\\]+$/, '');
+  if (!base) return path;
+  if (path === base) return '~';
+  const separator = path.charAt(base.length);
+  if (path.startsWith(base) && (separator === '/' || separator === '\\')) {
+    return `~${path.slice(base.length)}`;
+  }
+  return path;
 }
 
 /** The path below the scanned folder, so rows named `api` or `web` can be told apart. */
