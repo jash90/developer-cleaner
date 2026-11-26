@@ -9,7 +9,7 @@
 // It also checks the head (canonical, hreflang, Open Graph, Twitter, JSON-LD) against the
 // published URL, that every absolute site URL and the sitemap point at real files, that the
 // Open Graph images are 1200x630, that every screenshot is used, and that the app's former
-// name appears only in the one note marked data-former-name.
+// name appears nowhere.
 // Preview captures land in node_modules/.cache/site-preview/ for a visual once-over.
 
 import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -92,9 +92,7 @@ function checkFiles() {
 
   for (const file of textFiles) {
     const name = file.replace(`${root}/`, '');
-    let text = readFileSync(file, 'utf8');
-    // The update note for people coming from the old name is the one place it belongs.
-    text = text.replace(/<p data-former-name>[\s\S]*?<\/p>/g, '');
+    const text = readFileSync(file, 'utf8');
     text.split('\n').forEach((line, index) => {
       if (FORMER_NAME.test(line)) fail(name, `former name on line ${index + 1}: ${line.trim()}`);
     });
