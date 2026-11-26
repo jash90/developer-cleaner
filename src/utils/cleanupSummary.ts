@@ -47,26 +47,47 @@ export function createCleanupSummary(
     { label: "developer caches", count: caches.length },
   ].filter((item) => item.count > 0);
 
-  const worktreeSize = input.worktrees.reduce(
-    (total, worktree) => total + worktree.size,
-    0,
-  );
-  // A worktree's size already includes everything inside it.
-  const standaloneSize = (folders: CleanupCandidate[]) => folders
-    .filter((folder) => !input.worktrees.some(
-      (worktree) => isNestedPath(folder.path, worktree.path),
-    ))
-    .reduce((total, folder) => total + folder.size, 0);
-
-  const cacheSize = caches.reduce((total, cache) => total + cache.size, 0);
-
   return {
     totalCount: input.nodeModules.length + buildArtifacts.length + input.worktrees.length
       + caches.length,
-    totalSize: worktreeSize + standaloneSize(input.nodeModules) + standaloneSize(buildArtifacts)
-      + cacheSize,
+    totalSize: categoryTotals(input).total,
     items,
     hasEstimate: caches.some((cache) => cache.isEstimate === true),
+  };
+}
+
+export interface CategoryTotals {
+  /** node_modules outside every listed worktree. */
+  nodeModules: number;
+  /** Build folders outside every listed worktree. */
+  buildArtifacts: number;
+  /** Worktrees, including whatever node_modules and build folders sit inside them. */
+  worktrees: number;
+  caches: number;
+  /** The four above: each byte counted once, so the parts add up to this. */
+  total: number;
+}
+
+/**
+ * What removing all of `input` frees, split by category. A worktree's size already includes
+ * everything inside it, so folders inside a listed worktree count towards the worktree only.
+ */
+export function categoryTotals(input: CleanupSummaryInput): CategoryTotals {
+  const sizeOf = (items: CleanupCandidate[]) => items.reduce((total, item) => total + item.size, 0);
+  const standalone = (folders: CleanupCandidate[]) => folders.filter(
+    (folder) => !input.worktrees.some((worktree) => isNestedPath(folder.path, worktree.path)),
+  );
+
+  const nodeModules = sizeOf(standalone(input.nodeModules));
+  const buildArtifacts = sizeOf(standalone(input.buildArtifacts ?? []));
+  const worktrees = sizeOf(input.worktrees);
+  const caches = sizeOf(input.caches ?? []);
+  return {
+    nodeModules,
+    buildArtifacts,
+    worktrees,
+    caches,
+    total: nodeModules + buildArtifacts + worktrees + caches,
   };
 }
 

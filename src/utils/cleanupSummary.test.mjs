@@ -485,3 +485,21 @@ test("reports build folders on their own line, and only when some were requested
   );
   assert.deepEqual(crashed.buildArtifacts, { removed: 0, failed: 0, freedBytes: 0, messages: [] });
 });
+
+test("category totals add up to the total and count nested folders once", () => {
+  assert.deepEqual(
+    cleanupSummary.categoryTotals({
+      nodeModules: [
+        { path: "/w/feature/node_modules", size: 400 },
+        { path: "/p/app/node_modules", size: 100 },
+      ],
+      buildArtifacts: [
+        { path: "/w/feature/target", size: 50 },
+        { path: "/p/app/.next", size: 20 },
+      ],
+      worktrees: [{ path: "/w/feature", size: 1_000 }],
+      caches: [{ path: "/c/npm", size: 7 }],
+    }),
+    { nodeModules: 100, buildArtifacts: 20, worktrees: 1_000, caches: 7, total: 1_127 },
+  );
+});
