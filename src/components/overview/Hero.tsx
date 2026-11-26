@@ -1,5 +1,6 @@
 import type { DiskSpace } from '../../types';
 import { CATEGORIES, CATEGORY_ORDER, type CategoryId } from '../../utils/categories';
+import { reclaimableOnVolume } from '../../utils/diskSpace';
 import { formatSize } from '../../utils/formatSize';
 import { formatDuration } from '../../utils/time';
 import { useNow } from '../../hooks/useClock';
@@ -24,13 +25,16 @@ interface HeroProps {
   total: number;
   totalIsEstimate: boolean;
   disk: DiskSpace | null;
+  /** Whether the home folder, which holds the developer caches, is on `disk`'s volume. */
+  cachesOnVolume: boolean;
   scanLabel: string | null;
   scan: HeroScan | null;
 }
 
 /**
  * The bar is the whole volume: what else is on it, then each category's share, then what is
- * free now. The parts are clamped to the used space, since a cache can sit on another volume.
+ * free now. The parts are clamped to the used space, which they can only exceed when sizes
+ * changed since the scan; caches on another volume are left out before this.
  */
 function diskSegments(disk: DiskSpace, parts: HeroProps['parts']) {
   const used = Math.max(0, disk.total_bytes - disk.available_bytes);
@@ -86,9 +90,12 @@ function ScanProgress({ scan, scanLabel }: { scan: HeroScan; scanLabel: string |
   );
 }
 
-export function Hero({ parts, total, totalIsEstimate, disk, scanLabel, scan }: HeroProps) {
-  const freeAfter = disk ? Math.min(disk.total_bytes, disk.available_bytes + total) : 0;
-  const bar = disk && disk.total_bytes > 0 ? diskSegments(disk, parts) : null;
+export function Hero({ parts, total, totalIsEstimate, disk, cachesOnVolume, scanLabel, scan }: HeroProps) {
+  // The forecast and the bar are about one volume; the total at the left stays global.
+  const onVolume = reclaimableOnVolume(total, bytesOf(parts.caches), cachesOnVolume);
+  const volumeParts = cachesOnVolume ? parts : { ...parts, caches: 0 };
+  const freeAfter = disk ? Math.min(disk.total_bytes, disk.available_bytes + onVolume) : 0;
+  const bar = disk && disk.total_bytes > 0 ? diskSegments(disk, volumeParts) : null;
 
   return (
     <section className="flex-none bg-white border-b border-slate-200 px-6 py-4" aria-label="Summary">
@@ -112,10 +119,10 @@ export function Hero({ parts, total, totalIsEstimate, disk, scanLabel, scan }: H
               </span>
               <span className="tabular-nums whitespace-nowrap">
                 {formatSize(disk.available_bytes)} free
-                {!scan && total > 0 && (
-                  <>
+                {!scan && onVolume > 0 && (
+                  <span title={cachesOnVolume ? undefined : 'Developer caches are on another volume, so they are not counted here.'}>
                     {' → '}<b className="text-slate-800">{formatSize(freeAfter)}</b> if everything here is removed
-                  </>
+                  </span>
                 )}
               </span>
             </div>
@@ -124,7 +131,7 @@ export function Hero({ parts, total, totalIsEstimate, disk, scanLabel, scan }: H
             <div
               className="h-3 rounded-full bg-slate-100 overflow-hidden flex"
               role="img"
-              aria-label={`${formatSize(disk?.available_bytes ?? 0)} free; ${formatSize(total)} of the used space can be reclaimed`}
+              aria-label={`${formatSize(disk?.available_bytes ?? 0)} free; ${formatSize(onVolume)} of the used space can be reclaimed`}
             >
               <span className="bg-slate-300" style={{ width: bar.other }} />
               {bar.segments.map((segment) => (

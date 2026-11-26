@@ -45,6 +45,9 @@ function App() {
     selectedWorktreesNeedingConsent,
   } = cleanup;
   const disk = useDiskSpace(scanPath, isScanning || isDeleting);
+  // Caches live under the home folder; they count toward the scanned volume only if it holds it.
+  const homeDisk = useDiskSpace(null, isScanning || isDeleting);
+  const cachesOnDiskVolume = disk !== null && homeDisk !== null && disk.mount_point === homeDisk.mount_point;
   const projectSelectionDisabled = isDeleting || isScanning;
 
   const closeReview = useCallback(() => setReviewOpen(false), []);
@@ -89,6 +92,7 @@ function App() {
             cleanup={cleanup}
             caches={caches}
             disk={disk}
+            cachesOnVolume={cachesOnDiskVolume}
             scan={heroScan}
             scanLabel={scanPath ? shortenHome(scanPath) : null}
             onNavigate={setView}

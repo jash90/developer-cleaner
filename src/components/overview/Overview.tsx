@@ -26,6 +26,8 @@ interface OverviewProps {
   cleanup: Cleanup;
   caches: Caches;
   disk: DiskSpace | null;
+  /** Whether the home folder, which holds the developer caches, is on `disk`'s volume. */
+  cachesOnVolume: boolean;
   scan: HeroScan | null;
   scanLabel: string | null;
   onNavigate: (view: View) => void;
@@ -41,6 +43,7 @@ export function Overview({
   cleanup,
   caches,
   disk,
+  cachesOnVolume,
   scan,
   scanLabel,
   onNavigate,
@@ -157,6 +160,7 @@ export function Overview({
         total={totals.total}
         totalIsEstimate={cleanup.totalsAreEstimate}
         disk={disk}
+        cachesOnVolume={cachesOnVolume}
         scanLabel={scanLabel}
         scan={scan}
       />
