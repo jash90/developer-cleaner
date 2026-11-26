@@ -22,6 +22,7 @@ import {
 import { formatSize } from '../utils/formatSize';
 import { isPruneTarget } from '../utils/categories';
 import { computeSuggestions, guardSelection, type Suggestion } from '../utils/suggestions';
+import { createStopGate } from '../utils/scanStop';
 import { readLastScanDuration, saveLastScanDuration } from './scanTiming';
 import type { TrayStats, WorktreeDeleteResult } from '../types';
 
@@ -115,10 +116,12 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   // is never affected: the backend hands each scan its own generation.
   const [stopRequested, setStopRequested] = useState(false);
   const isStopping = stopRequested && (isScanningFolders || isScanningWorktrees);
+  // A new scan waits for a stop still in flight, so that stop cannot end the new scan.
+  const [stopGate] = useState(() => createStopGate(() => invoke('cancel_scan')));
   const stopScan = useCallback(() => {
     setStopRequested(true);
-    void invoke('cancel_scan').catch(() => setStopRequested(false));
-  }, []);
+    void stopGate.stop().catch(() => setStopRequested(false));
+  }, [stopGate]);
   const scanStopped = !isScanningFolders && !isScanningWorktrees
     && (nodeModules.wasStopped || mergedWorktrees.wasStopped);
   const isDeleting = isCoordinatingDeletion
@@ -258,6 +261,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
 
       const path = selected as string;
       setScanPath(path);
+      await stopGate.settled();
       setStopRequested(false);
       await runCleanupScans(path, scanNodeModules, scanMergedWorktrees);
       setListBuiltAt(Date.now());
@@ -267,17 +271,18 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     } finally {
       setIsSelectingDirectory(false);
     }
-  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules]);
+  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, stopGate]);
 
   /** Scan the same folder again, without going through the picker. */
   const rescan = useCallback(async () => {
     if (!scanPath || isScanning || isDeleting) return;
     setLastReport(null);
+    await stopGate.settled();
     setStopRequested(false);
     await runCleanupScans(scanPath, scanNodeModules, scanMergedWorktrees);
     setListBuiltAt(Date.now());
     refreshTray();
-  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, scanPath]);
+  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, scanPath, stopGate]);
 
   // The window list is a snapshot from the last scan; the menu bar recounts every fifteen
   // minutes. When both describe the same folder and disagree, the list is the one that aged.
