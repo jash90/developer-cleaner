@@ -104,7 +104,7 @@ function App() {
           <BuildFoldersPage
             buildArtifacts={buildArtifacts}
             filter={view.filter}
-            listBuiltAt={cleanup.listBuiltAt}
+            listBuiltAt={cleanup.foldersListedAt}
             scanPath={scanPath}
             selectionDisabled={projectSelectionDisabled}
             onClearFilter={() => setView({ page: 'build', filter: null })}

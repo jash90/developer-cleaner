@@ -79,6 +79,9 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   // the ones that arrive afterwards are compared with it.
   const [trayStats, setTrayStats] = useState<{ stats: TrayStats; receivedAt: number } | null>(null);
   const [listBuiltAt, setListBuiltAt] = useState(0);
+  // When the folder walk's list arrived. Build-folder ages are judged against it, so they are
+  // right as soon as that list is shown, without waiting for the slower worktree scan.
+  const [foldersListedAt, setFoldersListedAt] = useState(0);
   // When the running folder scan started and how long the last full one of this folder took,
   // so a long scan can show progress against something real.
   const [folderScanTiming, setFolderScanTiming] = useState<{
@@ -93,6 +96,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     setFolderScanTiming({ startedAt, expectedMs: readLastScanDuration(path) });
     const result = await scanNodeModulesOnly(path);
     if (result) saveLastScanDuration(path, Date.now() - startedAt);
+    setFoldersListedAt(Date.now());
     replaceBuildArtifacts(result?.build_artifacts ?? []);
   }, [replaceBuildArtifacts, scanNodeModulesOnly]);
 
@@ -191,14 +195,14 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     blockedWorktreePaths: blockedWorktrees,
     caches: isScanningCaches ? null : cacheTargets,
     // Ages are judged against when the list was built, not a clock that moves during render.
-    nowSeconds: listBuiltAt / 1000,
+    nowSeconds: foldersListedAt / 1000,
   }), [
     blockedWorktrees,
     buildArtifacts.targets,
     cacheTargets,
     folderScanDone,
+    foldersListedAt,
     isScanningCaches,
-    listBuiltAt,
     mergedWorktrees.worktrees,
     worktreeScanDone,
   ]);
@@ -364,6 +368,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
       deletionInProgress.current = false;
       setIsCoordinatingDeletion(false);
       setListBuiltAt(Date.now());
+      setFoldersListedAt(Date.now());
       // The menu bar counts are now stale by definition.
       refreshTray();
     }
@@ -419,6 +424,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     isStopping,
     scanStopped,
     listBuiltAt,
+    foldersListedAt,
     selectedWorktreesNeedingConsent,
     trayMismatch,
     removableWorktreeCount: windowCount,
