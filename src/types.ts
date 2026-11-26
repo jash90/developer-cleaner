@@ -180,3 +180,11 @@ export interface SortConfig {
   field: SortField;
   direction: SortDirection;
 }
+
+/** Free and total space of the volume holding the scanned folder (or the home folder). */
+export interface DiskSpace {
+  available_bytes: number;
+  total_bytes: number;
+  mount_point: string;
+  volume_name: string;
+}
