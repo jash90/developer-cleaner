@@ -89,9 +89,11 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     };
   }, []);
 
-  const isScanning = isSelectingDirectory
-    || nodeModules.isScanning
-    || mergedWorktrees.isScanning;
+  // Each scan reports on its own, so a category is shown as soon as its own scan returns
+  // instead of waiting for the slowest one. `isScanning` is the union, for disabling actions.
+  const isScanningFolders = nodeModules.isScanning;
+  const isScanningWorktrees = mergedWorktrees.isScanning;
+  const isScanning = isSelectingDirectory || isScanningFolders || isScanningWorktrees;
   const isDeleting = isCoordinatingDeletion
     || nodeModules.isDeleting
     || buildArtifacts.isDeleting
@@ -301,6 +303,9 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     mergedWorktrees,
     scanPath,
     isScanning,
+    isScanningFolders,
+    isScanningWorktrees,
+    isScanningCaches,
     isDeleting,
     canDelete,
     summary,

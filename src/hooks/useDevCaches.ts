@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { CacheCleanResult, CacheScanResult, CacheTarget } from '../types';
 import {
@@ -108,6 +108,15 @@ export function useDevCaches() {
   }, [isCleaning, isScanning, keyOf, selectedIds, targets]);
 
   const clearError = useCallback(() => setError(null), []);
+
+  // Caches live at fixed locations, so they are scanned at launch instead of waiting for a
+  // click. The ref keeps StrictMode's second effect run from starting a second scan.
+  const launchScanStarted = useRef(false);
+  useEffect(() => {
+    if (launchScanStarted.current) return;
+    launchScanStarted.current = true;
+    void scan();
+  }, [scan]);
 
   const totalReclaimable = useMemo(
     () => targets.reduce((sum, target) => sum + target.reclaimable_size, 0),

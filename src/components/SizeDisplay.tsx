@@ -5,22 +5,14 @@ interface SizeDisplayProps {
   className?: string;
 }
 
+/**
+ * Sizes are data, not warnings: they stay neutral so that red keeps its one meaning in this
+ * app, uncommitted work that a removal would lose.
+ */
 export function SizeDisplay({ bytes, className = '' }: SizeDisplayProps) {
-  const formatted = formatSize(bytes);
-
-  // Color code based on size
-  let colorClass = 'text-gray-600';
-  if (bytes > 500 * 1024 * 1024) { // > 500MB
-    colorClass = 'text-red-600 font-semibold';
-  } else if (bytes > 100 * 1024 * 1024) { // > 100MB
-    colorClass = 'text-orange-600';
-  } else if (bytes > 50 * 1024 * 1024) { // > 50MB
-    colorClass = 'text-yellow-600';
-  }
-
   return (
-    <span className={`${colorClass} ${className}`}>
-      {formatted}
+    <span className={`text-gray-900 tabular-nums ${className}`}>
+      {formatSize(bytes)}
     </span>
   );
 }

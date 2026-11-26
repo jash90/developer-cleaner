@@ -30,7 +30,9 @@ export function useNodeModules() {
           comparison = a.parent_project.localeCompare(b.parent_project);
           break;
         case 'size':
-          comparison = a.size - b.size;
+          // The figure each row shows: what a delete frees, not the nominal size, which counts
+          // pnpm and bun hardlinks into a shared store that survives the delete.
+          comparison = a.reclaimable_size - b.reclaimable_size;
           break;
         case 'manager':
           comparison = a.package_manager.localeCompare(b.package_manager);
@@ -149,19 +151,12 @@ export function useNodeModules() {
     ));
   }, [folders]);
 
-  const selectedSize = useMemo(() => {
-    return folders
-      .filter(f => selectedPaths.has(f.path))
-      .reduce((sum, f) => sum + f.size, 0);
-  }, [folders, selectedPaths]);
-
   return {
     folders: sortedFolders,
     selectedPaths,
     isScanning,
     isDeleting,
     scanPath,
-    selectedSize,
     error,
     sortConfig,
     scan,
