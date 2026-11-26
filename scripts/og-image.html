@@ -1,6 +1,7 @@
 <!doctype html>
 <!-- Template for site/assets/og-image.png (pl) and og-image-en.png (en), 1200x630.
-     Same layout as the other jash90 app OG images. Render: ?lang=pl|en. Not deployed. -->
+     Same layout as the other jash90 app OG images. Rendered by `npm run screenshots`
+     with ?lang=pl|en, after the overview screenshot it frames. Not deployed. -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -33,8 +34,8 @@
   <script>
     var lang = new URLSearchParams(location.search).get('lang') || 'pl';
     document.getElementById('tagline').textContent = lang === 'en'
-      ? 'Reclaim disk space from node_modules, worktrees and caches.'
-      : 'Odzyskaj miejsce po node_modules, worktree i cache.';
+      ? 'Reclaim disk space from node_modules, build folders, worktrees and caches.'
+      : 'Odzyskaj miejsce po node_modules, folderach buildów, worktree i cache.';
     document.documentElement.lang = lang;
   </script>
 </body>

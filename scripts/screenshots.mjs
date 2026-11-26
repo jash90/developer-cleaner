@@ -1,4 +1,6 @@
-// Regenerates the screenshots used by the GitHub Pages site in site/assets/screenshots/.
+// Regenerates the screenshots used by the GitHub Pages site in site/assets/screenshots/,
+// and the two Open Graph images (site/assets/og-image.png for pl, og-image-en.png for en),
+// which are rendered from scripts/og-image.html around the fresh overview screenshot.
 //
 //   npx playwright install chromium   # once per machine
 //   npm run screenshots
@@ -13,7 +15,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 
@@ -26,6 +28,7 @@ const MB = 1024 ** 2;
 const HOME = '/Users/dev';
 const PROJECTS = `${HOME}/Projects`;
 const DAY = 86_400;
+const now = Math.floor(Date.now() / 1000);
 
 // ---------------------------------------------------------------------------
 // Fixtures — shapes mirror src/types.ts exactly (snake_case, as serde sends them).
@@ -56,6 +59,20 @@ const nodeModules = [
   folder('edge-worker', 'bun', 58 * MB, 58 * MB, ['hono', 'typescript']),
   folder('docs-portal', 'yarn', 174 * MB, 174 * MB, ['gatsby', 'react']),
 ];
+
+// Build folders: one per kind, in projects of their own or beside the node_modules above.
+// None sits inside a `.worktrees` checkout, so no size is de-duplicated against a worktree.
+function artifact(kind, project, relative, reclaimable, ageDays) {
+  return {
+    path: `${PROJECTS}/${project}/${relative}`,
+    kind,
+    size: reclaimable,
+    allocated_size: reclaimable,
+    reclaimable_size: reclaimable,
+    last_modified: now - ageDays * DAY,
+    parent_project: project,
+  };
+}
 
 function worktree(repo, dir, branch, base, extra = {}) {
   return {
@@ -102,13 +119,24 @@ const worktrees = [
   }),
 ];
 
+const buildArtifacts = [
+  artifact('cargo_target', 'image-resizer', 'target', 7.4 * GB, 64),
+  artifact('cargo_target', 'desktop-notes', 'src-tauri/target', 3.2 * GB, 21),
+  artifact('cocoapods', 'mobile-app', 'ios/Pods', 1.18 * GB, 12),
+  artifact('next_build', 'storefront-web', '.next', 642 * MB, 2),
+  artifact('next_build', 'docs-portal', '.next', 318 * MB, 95),
+  artifact('nx_cache', 'platform-monorepo', '.nx', 236 * MB, 30),
+  artifact('turbo_cache', 'design-system', '.turbo', 96 * MB, 8),
+  artifact('android_cxx', 'mobile-app', 'android/app/.cxx', 1.36 * GB, 12),
+  artifact('coverage', 'api-gateway', 'coverage', 18 * MB, 40),
+  artifact('expo_state', 'mobile-app', '.expo', 2 * MB, 12),
+];
+
 const worktreeDiagnostics = [
   `${PROJECTS}/storefront-web: compared against origin/HEAD, origin/main, origin/development`,
   `${PROJECTS}/api-gateway: compared against origin/HEAD, origin/main, origin/develop`,
   `${PROJECTS}/mobile-app: compared against origin/HEAD, origin/main`,
 ];
-
-const now = Math.floor(Date.now() / 1000);
 
 function cache(id, kind, label, path, reclaimable, extra = {}) {
   return {
@@ -191,6 +219,7 @@ const ticks = [2.9, 1.4, 1.1, 0.9, 1.0, 0.8].map((seconds, index) => ({
 const fixtures = {
   scanPath: PROJECTS,
   nodeModules,
+  buildArtifacts,
   worktrees,
   worktreeDiagnostics,
   caches,
@@ -213,6 +242,7 @@ function installTauriMock(data) {
       await wait(150);
       return {
         folders: data.nodeModules,
+        build_artifacts: data.buildArtifacts,
         total_size: sum(data.nodeModules, 'size'),
         total_allocated_size: sum(data.nodeModules, 'allocated_size'),
         total_reclaimable_size: sum(data.nodeModules, 'reclaimable_size'),
@@ -248,9 +278,13 @@ function installTauriMock(data) {
     }),
     tick_diagnostics: () => data.ticks,
     refresh_tray_now: () => null,
+    // The window listens for the menu bar's counts; no event ever arrives here.
+    'plugin:event|listen': () => 1,
+    'plugin:event|unlisten': () => null,
   };
 
   let callbackId = 0;
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },
     invoke: async (cmd, args = {}) => {
@@ -333,18 +367,20 @@ async function main() {
     for (const project of ['storefront-web', 'mobile-app', 'api-gateway', 'legacy-crm']) {
       await page.getByLabel(`Select node_modules in ${project}`).check();
     }
-    await page.getByRole('button', { name: 'Select removable' }).click();
+    // Build folders are selected per tool; the cheap ones only.
+    for (const tool of ['Next.js', 'Turborepo', 'Test coverage']) {
+      await page.getByLabel(`Select all ${tool} folders`, { exact: true }).check();
+    }
+    // Clean worktrees one by one: "Select all" would also take the one with uncommitted
+    // changes, and that one gets a shot of its own below.
+    for (const branch of ['feature/checkout-v2', 'fix/cart-rounding', 'feature/rate-limits', 'release/2.4', 'chore/old-auth']) {
+      await page.getByLabel(`Select ${branch}`, { exact: true }).check();
+    }
     // Checking boxes scrolls them into view; the overview shot starts from the top.
     const scroller = page.locator('main');
     await scroller.evaluate((element) => { element.scrollTop = 0; });
     await page.mouse.move(0, 0);
     await save(page, 'overview-desktop');
-
-    // Open-graph preview at 1200x630 — the app's own minimum width, so no column is cut off.
-    await page.setViewportSize({ width: 1200, height: 630 });
-    await page.screenshot({ path: join(root, 'site', 'assets', 'og-image.png') });
-    await page.setViewportSize({ width: 1440, height: 900 });
-    written.push(join(root, 'site', 'assets', 'og-image.png'));
 
     const scrollTo = async (text) => {
       await page.getByText(text, { exact: true }).first().evaluate((element) => {
@@ -352,7 +388,11 @@ async function main() {
         const scroller = document.querySelector('main');
         scroller.scrollTop += section.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
       });
+      await page.mouse.move(0, 0);
     };
+
+    await scrollTo('Build folders');
+    await save(page, 'builds-desktop');
 
     await scrollTo('Merged Git worktrees');
     await page.getByText('Base branches compared').click();
@@ -367,7 +407,17 @@ async function main() {
     await page.getByRole('button', { name: 'Remove Selected' }).click();
     await page.getByText('Remove selected items?').waitFor();
     await save(page, 'confirm-desktop');
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    // The same removal plus a worktree with uncommitted changes: the dialog names it and keeps
+    // the remove button disabled until the loss is acknowledged.
+    await page.getByLabel('Select feature/search-filters', { exact: true }).check();
+    await scroller.evaluate((element) => { element.scrollTop = 0; });
+    await page.getByRole('button', { name: 'Remove Selected' }).click();
+    await page.getByText('will be permanently lost').waitFor();
+    await page.mouse.move(0, 0);
+    await save(page, 'confirm-consent-desktop');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByText('Background refresh').waitFor();
@@ -376,6 +426,18 @@ async function main() {
 
     if (errors.length > 0) {
       throw new Error(`The app logged errors while capturing:\n${errors.join('\n')}`);
+    }
+
+    // Open Graph images: the template frames the overview screenshot written above.
+    const og = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
+    for (const [lang, name] of [['pl', 'og-image.png'], ['en', 'og-image-en.png']]) {
+      const template = pathToFileURL(join(root, 'scripts', 'og-image.html'));
+      template.search = `?lang=${lang}`;
+      await og.goto(template.href, { waitUntil: 'load' });
+      await og.evaluate(() => Promise.all([...document.images].map((image) => image.decode())));
+      const file = join(root, 'site', 'assets', name);
+      await og.screenshot({ path: file });
+      written.push(file);
     }
   } finally {
     await browser.close();
