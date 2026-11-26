@@ -5,6 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type { useDevCaches } from './useDevCaches';
 import { useMergedWorktrees } from './useMergedWorktrees';
 import { useNodeModules, type NodeModulesDeletion } from './useNodeModules';
+import { useBuildArtifacts, type BuildArtifactDeletion } from './useBuildArtifacts';
 import {
   countOutcome,
   countRemovableWorktrees,
@@ -34,8 +35,13 @@ function refreshTray() {
  */
 export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const nodeModules = useNodeModules();
+  const buildArtifacts = useBuildArtifacts();
   const mergedWorktrees = useMergedWorktrees();
-  const scanNodeModules = nodeModules.scan;
+  const scanNodeModulesOnly = nodeModules.scan;
+  const replaceBuildArtifacts = buildArtifacts.replace;
+  const deleteBuildArtifacts = buildArtifacts.deleteSelected;
+  const reconcileBuildArtifacts = buildArtifacts.reconcileAfterCleanup;
+  const clearBuildArtifactsError = buildArtifacts.clearError;
   const scanMergedWorktrees = mergedWorktrees.scan;
   const deleteNodeModules = nodeModules.deleteSelected;
   const reconcileNodeModules = nodeModules.reconcileAfterCleanup;
@@ -63,6 +69,13 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const [trayStats, setTrayStats] = useState<{ stats: TrayStats; receivedAt: number } | null>(null);
   const [listBuiltAt, setListBuiltAt] = useState(0);
 
+  // One walk finds node_modules and build folders; the build folders go to their own list.
+  const scanNodeModules = useCallback(async (path: string) => {
+    replaceBuildArtifacts([]);
+    const result = await scanNodeModulesOnly(path);
+    replaceBuildArtifacts(result?.build_artifacts ?? []);
+  }, [replaceBuildArtifacts, scanNodeModulesOnly]);
+
   useEffect(() => {
     const unlisten = listen<TrayStats>('tray-stats', (event) => {
       setTrayStats({ stats: event.payload, receivedAt: Date.now() });
@@ -77,6 +90,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     || mergedWorktrees.isScanning;
   const isDeleting = isCoordinatingDeletion
     || nodeModules.isDeleting
+    || buildArtifacts.isDeleting
     || mergedWorktrees.isDeleting
     || isCleaningCaches;
   // Kept apart from `isScanning`, which drives the full-page scan screen for the folder scan.
@@ -91,6 +105,9 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     nodeModules: nodeModules.folders.filter((folder) => (
       nodeModules.selectedPaths.has(folder.path)
     )),
+    buildArtifacts: buildArtifacts.targets.filter((target) => (
+      buildArtifacts.selectedPaths.has(target.path)
+    )),
     worktrees: mergedWorktrees.worktrees.filter((worktree) => (
       mergedWorktrees.selectedPaths.has(worktree.path)
     )),
@@ -104,15 +121,18 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     mergedWorktrees.worktrees,
     nodeModules.folders,
     nodeModules.selectedPaths,
+    buildArtifacts.selectedPaths,
+    buildArtifacts.targets,
     selectedCaches,
   ]);
 
   const availableSummary = useMemo(() => createCleanupSummary({
     nodeModules: nodeModules.folders,
+    buildArtifacts: buildArtifacts.targets,
     worktrees: mergedWorktrees.worktrees.filter((worktree) => (
       isSelectableWorktree(worktree) && !blockedWorktrees.has(worktree.path)
     )),
-  }), [blockedWorktrees, mergedWorktrees.worktrees, nodeModules.folders]);
+  }), [blockedWorktrees, mergedWorktrees.worktrees, nodeModules.folders, buildArtifacts.targets]);
 
   const selectedWorktreesNeedingConsent = useMemo(() => worktreesNeedingConsent(
     mergedWorktrees.worktrees.filter((worktree) => (
@@ -176,11 +196,15 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     const nodeModulePaths = nodeModules.folders
       .filter((folder) => nodeModules.selectedPaths.has(folder.path))
       .map((folder) => folder.path);
+    const buildArtifactPaths = buildArtifacts.targets
+      .filter((target) => buildArtifacts.selectedPaths.has(target.path))
+      .map((target) => target.path);
     const selectedWorktrees = mergedWorktrees.worktrees.filter((worktree) => (
       mergedWorktrees.selectedPaths.has(worktree.path)
     ));
     const requested = {
       nodeModules: nodeModulePaths.length,
+      buildArtifacts: buildArtifactPaths.length,
       worktrees: selectedWorktrees.length,
       caches: selectedCaches.length,
     };
@@ -193,23 +217,34 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
       const report = await runUnifiedCleanup(
         async () => {
           let deletion: NodeModulesDeletion = { results: [], deletedFolders: [] };
+          let artifactDeletion: BuildArtifactDeletion = { results: [], deletedArtifacts: [] };
           let worktreeResults: WorktreeDeleteResult[] = [];
           await runCleanupDeletion(
-            () => deleteNodeModules(nodeModulePaths),
-            (result) => {
-              deletion = result;
+            // Folders inside a selected worktree go first, so its size can be adjusted.
+            () => Promise.all([
+              deleteNodeModules(nodeModulePaths),
+              deleteBuildArtifacts(buildArtifactPaths),
+            ]),
+            ([nodeModulesResult, artifactResult]) => {
+              deletion = nodeModulesResult;
+              artifactDeletion = artifactResult;
             },
-            () => deleteMergedWorktrees(selectedWorktrees, deletion.deletedFolders),
+            () => deleteMergedWorktrees(
+              selectedWorktrees,
+              [...deletion.deletedFolders, ...artifactDeletion.deletedArtifacts],
+            ),
             (results) => {
               worktreeResults = results;
-              reconcileNodeModules(
-                deletion.deletedFolders,
-                results.filter((result) => result.success).map((result) => result.path),
-              );
+              const removedWorktreePaths = results
+                .filter((result) => result.success)
+                .map((result) => result.path);
+              reconcileNodeModules(deletion.deletedFolders, removedWorktreePaths);
+              reconcileBuildArtifacts(removedWorktreePaths);
             },
           );
           return {
             nodeModules: countOutcome(requested.nodeModules, deletion.results),
+            buildArtifacts: countOutcome(requested.buildArtifacts, artifactDeletion.results),
             worktrees: countOutcome(requested.worktrees, worktreeResults),
           };
         },
@@ -229,11 +264,15 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     cleanCaches,
     deleteMergedWorktrees,
     deleteNodeModules,
+    deleteBuildArtifacts,
     mergedWorktrees.selectedPaths,
     mergedWorktrees.worktrees,
     nodeModules.folders,
     nodeModules.selectedPaths,
     reconcileNodeModules,
+    reconcileBuildArtifacts,
+    buildArtifacts.selectedPaths,
+    buildArtifacts.targets,
     selectedCaches.length,
     summary.totalCount,
   ]);
@@ -241,16 +280,18 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const clearError = useCallback(() => {
     setPickerError(null);
     clearNodeModulesError();
+    clearBuildArtifactsError();
     clearMergedWorktreesError();
     clearCachesError();
-  }, [clearCachesError, clearMergedWorktreesError, clearNodeModulesError]);
+  }, [clearCachesError, clearMergedWorktreesError, clearNodeModulesError, clearBuildArtifactsError]);
 
   // Every source is shown: one category's failure must not hide another's.
-  const errors = [pickerError, nodeModules.error, mergedWorktrees.error, cachesError]
+  const errors = [pickerError, nodeModules.error, buildArtifacts.error, mergedWorktrees.error, cachesError]
     .filter((message): message is string => Boolean(message));
 
   return {
     nodeModules,
+    buildArtifacts,
     mergedWorktrees,
     scanPath,
     isScanning,

@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { formatSize } from '../utils/formatSize';
 
 interface ConfirmDialogWarning {
   message: string;
   entries: Array<{ key: string; label: string; detail: string }>;
+  /**
+   * When set, the confirm button stays disabled until this statement is ticked. Losing work
+   * must take a deliberate second act, not the same click that removes clean folders.
+   */
+  acknowledgement?: string;
 }
 
 interface ConfirmDialogProps {
@@ -20,8 +26,13 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-export function ConfirmDialog({
-  isOpen,
+export function ConfirmDialog(props: ConfirmDialogProps) {
+  // The body is mounted afresh on every open, so an acknowledgement ticked for one selection
+  // never carries over to the next.
+  return props.isOpen ? <ConfirmDialogBody {...props} /> : null;
+}
+
+function ConfirmDialogBody({
   title,
   description,
   items,
@@ -32,7 +43,9 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  if (!isOpen) return null;
+  const [acknowledged, setAcknowledged] = useState(false);
+  const needsAcknowledgement = Boolean(warning?.acknowledgement) && (warning?.entries.length ?? 0) > 0;
+  const canConfirm = !needsAcknowledgement || acknowledged;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -88,6 +101,17 @@ export function ConfirmDialog({
                 </li>
               ))}
             </ul>
+            {needsAcknowledgement && (
+              <label className="mt-3 flex items-start gap-2 text-sm text-red-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(event) => setAcknowledged(event.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-red-300 text-red-600 focus:ring-red-500"
+                />
+                <span>{warning.acknowledgement}</span>
+              </label>
+            )}
           </div>
         )}
 
@@ -100,7 +124,9 @@ export function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+            disabled={!canConfirm}
+            title={canConfirm ? undefined : 'Tick the confirmation above first'}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {confirmLabel}
           </button>

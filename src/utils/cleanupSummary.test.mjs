@@ -437,3 +437,51 @@ test("counts what was not confirmed removed as failed, and frees only reported b
     { removed: 1, failed: 0, freedBytes: 0 },
   );
 });
+
+test("lists build folders as their own category and does not double-count one inside a selected worktree", () => {
+  assert.deepEqual(
+    createCleanupSummary({
+      nodeModules: [{ path: "/p/app/node_modules", size: 100 }],
+      buildArtifacts: [
+        { path: "/p/repo-worktree/target", size: 4_000 },
+        { path: "/p/tool/target", size: 2_000 },
+      ],
+      worktrees: [{ path: "/p/repo-worktree", size: 5_000 }],
+    }),
+    {
+      totalCount: 4,
+      totalSize: 7_100,
+      items: [
+        { label: "node_modules folders", count: 1 },
+        { label: "build folders", count: 2 },
+        { label: "merged Git worktrees", count: 1 },
+      ],
+      hasEstimate: false,
+    },
+  );
+});
+
+test("reports build folders on their own line, and only when some were requested", async () => {
+  const report = await cleanupSummary.runUnifiedCleanup(
+    async () => ({
+      nodeModules: { removed: 0, failed: 0, freedBytes: 0 },
+      buildArtifacts: { removed: 2, failed: 1, freedBytes: 2_048 },
+      worktrees: { removed: 0, failed: 0, freedBytes: 0 },
+    }),
+    async () => ({ removed: 0, failed: 0, freedBytes: 0 }),
+    { nodeModules: 0, buildArtifacts: 3, worktrees: 0, caches: 0 },
+  );
+  assert.deepEqual(
+    cleanupSummary.formatCleanupReport(report, (bytes) => `${bytes} B`),
+    ["build folders: removed 2 · failed 1 · freed 2048 B"],
+  );
+
+  const crashed = await cleanupSummary.runUnifiedCleanup(
+    async () => {
+      throw new Error("chain crashed");
+    },
+    async () => ({ removed: 0, failed: 0, freedBytes: 0 }),
+    { nodeModules: 1, worktrees: 0, caches: 0 },
+  );
+  assert.deepEqual(crashed.buildArtifacts, { removed: 0, failed: 0, freedBytes: 0, messages: [] });
+});

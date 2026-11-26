@@ -78,7 +78,7 @@ pub(crate) fn git_spawn_count() -> u64 {
 }
 
 /// A `git` scoped to `directory`, which is how all but a couple of callers want it.
-fn git_command(directory: &Path) -> Command {
+pub(crate) fn git_command(directory: &Path) -> Command {
     let mut command = Command::new("git");
     command.arg("-C").arg(directory);
     prepare_git_command(&mut command);
@@ -2122,7 +2122,7 @@ mod tests {
             repo.git(&["add", "README.md"]);
             repo.git(&[
                 "-c",
-                "user.name=Node Modules Cleaner Tests",
+                "user.name=Developer Cleaner Tests",
                 "-c",
                 "user.email=tests@example.com",
                 "commit",
@@ -2179,7 +2179,7 @@ mod tests {
         fn commit_all(&self, message: &str) {
             self.git(&[
                 "-c",
-                "user.name=Node Modules Cleaner Tests",
+                "user.name=Developer Cleaner Tests",
                 "-c",
                 "user.email=tests@example.com",
                 "commit",
@@ -2195,7 +2195,7 @@ mod tests {
                 .arg(directory)
                 .args([
                     "-c",
-                    "user.name=Node Modules Cleaner Tests",
+                    "user.name=Developer Cleaner Tests",
                     "-c",
                     "user.email=tests@example.com",
                 ])
@@ -2242,7 +2242,7 @@ mod tests {
                 .arg(worktree)
                 .args([
                     "-c",
-                    "user.name=Node Modules Cleaner Tests",
+                    "user.name=Developer Cleaner Tests",
                     "-c",
                     "user.email=tests@example.com",
                     "commit",

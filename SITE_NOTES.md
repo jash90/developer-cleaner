@@ -4,7 +4,7 @@
 
 ## Czym jest aplikacja
 
-**Node Modules Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po trzech rodzajach śmieci deweloperskich:
+**Developer Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po trzech rodzajach śmieci deweloperskich:
 
 1. folderach `node_modules` w projektach (`scan_for_node_modules`, `delete_folders` — `src-tauri/src/commands.rs`),
 2. zmergowanych Git worktree (`scan_for_merged_worktrees`, `delete_merged_worktrees` — `src-tauri/src/git_worktrees.rs`),

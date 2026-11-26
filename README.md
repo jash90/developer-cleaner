@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" alt="Node Modules Cleaner" width="128" height="128">
+  <img src="src-tauri/icons/128x128.png" alt="Developer Cleaner" width="128" height="128">
 </p>
 
-<h1 align="center">Node Modules Cleaner</h1>
+<h1 align="center">Developer Cleaner</h1>
 
 <p align="center">
-  <strong>Reclaim your disk space by removing unused node_modules folders</strong>
+  <strong>Reclaim disk space from node_modules, build folders, merged worktrees and developer caches</strong>
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 ---
 
-A fast, cross-platform desktop application that reclaims disk space from `node_modules` folders, merged Git worktrees, and the shared developer caches that quietly grow to tens of gigabytes.
+A fast, cross-platform desktop application that reclaims disk space from `node_modules` folders, build folders (Cargo `target`, CocoaPods `Pods`, `.next`, `.nx`, `.turbo`, Android `.cxx`, `coverage`, `.expo`), merged Git worktrees, and the shared developer caches that quietly grow to tens of gigabytes.
 
 ## Features
 
@@ -86,8 +86,8 @@ rather than deleted, so entries still referenced by your projects are kept.
 ## How It Works
 
 1. **Select a folder** — Choose a directory to scan (e.g., your Projects folder)
-2. **Wait for scan** — One scan finds both `node_modules` folders and merged Git worktrees
-3. **Review both panels** — `node_modules` results appear first, with merged worktrees in a separate panel below
+2. **Wait for scan** — One scan finds `node_modules` folders, build folders and merged Git worktrees
+3. **Review the panels** — `node_modules` results appear first, then build folders grouped by tool, then merged worktrees. A build folder is offered only when the tool that made it left its marks (a `target` needs `Cargo.toml` beside it and Cargo's `CACHEDIR.TAG` inside, `Pods` needs a `Podfile` and `Manifest.lock`, and so on) and Git tracks nothing inside it. Removing a worktree with uncommitted changes needs an extra, explicit confirmation
 4. **Remove selected** — Select items from either panel and confirm them together
 
 The **Developer caches** panel needs no folder — those caches live at fixed locations,
