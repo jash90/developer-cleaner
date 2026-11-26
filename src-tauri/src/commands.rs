@@ -744,9 +744,24 @@ pub(crate) fn delete_checked(
                 return rejected(path, reason);
             }
 
+            let checked = DirIdentity::of(path_ref);
+
             // Measure before deleting: afterwards there is nothing left to measure, and
             // reporting "freed 0 bytes" for a successful delete would be worse than useless.
             let before = measure_dir_size(path_ref);
+
+            // Measuring a large folder takes seconds; check again that the same folder is still
+            // there and still passes, so the delete runs on what was checked.
+            if DirIdentity::of(path_ref) != checked {
+                return rejected(
+                    path,
+                    "Refusing to delete: the folder was replaced while it was being measured"
+                        .to_string(),
+                );
+            }
+            if let Some(reason) = rejection(path_ref) {
+                return rejected(path, reason);
+            }
             let failures = remove_tree_collecting(path_ref);
             // A clean delete leaves nothing behind, so the second full walk is only paid for
             // when something survived and the freed figure has to subtract it.
@@ -771,6 +786,30 @@ pub(crate) fn delete_checked(
             }
         })
         .collect()
+}
+
+/// What tells one directory apart from another put at the same path: device and inode on Unix.
+/// Elsewhere only the re-run check guards the gap between measuring and deleting.
+#[derive(Debug, PartialEq, Eq)]
+struct DirIdentity(Option<(u64, u64)>);
+
+impl DirIdentity {
+    fn of(path: &Path) -> Self {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            Self(
+                fs::symlink_metadata(path)
+                    .ok()
+                    .map(|metadata| (metadata.dev(), metadata.ino())),
+            )
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            Self(None)
+        }
+    }
 }
 
 /// Single-quote a path for a shell command shown to the user.
@@ -963,6 +1002,21 @@ mod tests {
 
     /// `Pods` and the dot-directories are pruned by the skip rules, so the walk must meet them
     /// as build artifacts first — and still never descend into them for `node_modules`.
+    #[test]
+    fn dir_identity_tells_folders_apart() {
+        let root = std::env::temp_dir().join(format!("dir-identity-{}", std::process::id()));
+        fs::create_dir_all(root.join("a")).unwrap();
+        fs::create_dir_all(root.join("b")).unwrap();
+        let a = super::DirIdentity::of(&root.join("a"));
+        assert_eq!(a, super::DirIdentity::of(&root.join("a")));
+        #[cfg(unix)]
+        {
+            assert_ne!(a, super::DirIdentity::of(&root.join("b")));
+            assert_ne!(a, super::DirIdentity::of(&root.join("missing")));
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn artifact_rows_name_the_project_even_when_it_is_called_app() {
         let p = |s: &str| super::get_artifact_project(Path::new(s));

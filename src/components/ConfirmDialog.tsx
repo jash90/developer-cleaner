@@ -27,9 +27,11 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  // The body is mounted afresh on every open, so an acknowledgement ticked for one selection
-  // never carries over to the next.
-  return props.isOpen ? <ConfirmDialogBody {...props} /> : null;
+  // The body is mounted afresh on every open and whenever the named entries change (keyboard
+  // focus can still reach the lists behind the dialog), so a tick given for one set of
+  // worktrees never carries over to another.
+  const entriesKey = (props.warning?.entries ?? []).map((entry) => entry.key).join('\n');
+  return props.isOpen ? <ConfirmDialogBody key={entriesKey} {...props} /> : null;
 }
 
 function ConfirmDialogBody({

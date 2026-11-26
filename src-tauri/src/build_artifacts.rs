@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use walkdir::WalkDir;
 
 use crate::commands::{delete_checked, rejected, DeleteResult};
 use crate::git_worktrees::git_command;
@@ -213,6 +214,9 @@ pub(crate) fn artifact_rejection(path: &Path) -> Option<String> {
     if holds_running_executable(path) {
         return Some("Refusing to delete the build folder this app is running from".to_string());
     }
+    if contains_repository(path) {
+        return Some("Refusing to delete: it contains a Git repository of its own".to_string());
+    }
     match tracked_by_git(path) {
         Ok(false) => None,
         Ok(true) => Some("Refusing to delete: Git tracks files inside this folder".to_string()),
@@ -261,6 +265,21 @@ fn holds_running_executable(dir: &Path) -> bool {
     exe.starts_with(dir)
 }
 
+/// How deep a nested repository is looked for. None of 167 real build folders held one at any
+/// depth up to 6; the limit keeps the check cheap inside multi-gigabyte `target` folders.
+const NESTED_REPOSITORY_DEPTH: usize = 5;
+
+/// Whether a repository of its own lives inside `path`. The parent's `git ls-files` reads only
+/// the parent's index, so files tracked by a repository inside the folder would go unnoticed.
+fn contains_repository(path: &Path) -> bool {
+    WalkDir::new(path)
+        .min_depth(1)
+        .max_depth(NESTED_REPOSITORY_DEPTH)
+        .into_iter()
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name() == ".git")
+}
+
 /// Whether Git tracks any file inside `path`. Outside a repository nothing is tracked; any other
 /// failure to ask is an error, so the caller fails closed.
 fn tracked_by_git(path: &Path) -> Result<bool, String> {
@@ -282,6 +301,14 @@ fn tracked_by_git(path: &Path) -> Result<bool, String> {
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stderr.contains("not a git repository") {
+        // The same message comes for a `.git` that points nowhere (a stale `gitdir`). Only
+        // a folder with no `.git` above it is really outside a repository.
+        if parent.ancestors().any(|dir| dir.join(".git").exists()) {
+            return Err(format!(
+                "a repository is there but unreadable: {}",
+                stderr.trim()
+            ));
+        }
         return Ok(false);
     }
     Err(stderr.trim().to_string())
@@ -495,6 +522,39 @@ mod tests {
             candidate_kind(&configured.join(".expo")),
             Some(ArtifactKind::ExpoState)
         );
+    }
+
+    #[test]
+    fn refuses_a_folder_holding_a_repository_of_its_own() {
+        let root = temp_root("nested-repo");
+        let _cleanup = TestDirectory(root.clone());
+        let web = root.join("web");
+        write(&web.join("package.json"), "{}");
+        write(&web.join("coverage/lcov.info"), "TN:");
+        assert!(is_offered(&web.join("coverage")));
+        git(&web.join("coverage"), &["init", "-q"]);
+        assert_eq!(
+            candidate_kind(&web.join("coverage")),
+            Some(ArtifactKind::Coverage)
+        );
+        assert!(!is_offered(&web.join("coverage")));
+    }
+
+    #[test]
+    fn refuses_when_the_repository_around_it_cannot_be_read() {
+        let root = temp_root("broken-gitdir");
+        let _cleanup = TestDirectory(root.clone());
+        let web = root.join("web");
+        write(&web.join("package.json"), "{}");
+        write(&web.join("coverage/lcov.info"), "TN:");
+        assert!(is_offered(&web.join("coverage")));
+        // A linked worktree whose main repository was deleted: `.git` points nowhere.
+        write(
+            &web.join(".git"),
+            "gitdir: /nonexistent/.git/worktrees/web\n",
+        );
+        let reason = artifact_rejection(&web.join("coverage")).expect("must refuse");
+        assert!(reason.contains("could not ask Git"), "{reason}");
     }
 
     #[test]

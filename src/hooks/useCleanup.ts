@@ -33,6 +33,10 @@ function refreshTray() {
  * Coordinates all three cleanup categories behind one "Remove Selected". The cache hook is
  * passed in rather than created here because its panel also works with no folder scanned.
  */
+function toReclaimable(item: { path: string; reclaimable_size: number }) {
+  return { path: item.path, size: item.reclaimable_size };
+}
+
 export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const nodeModules = useNodeModules();
   const buildArtifacts = useBuildArtifacts();
@@ -101,13 +105,15 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     [cacheTargets, selectedCachePaths],
   );
 
+  // Totals count what a delete frees (`reclaimable_size`), the figure each row shows; the
+  // logical size counts hard-linked and sparse data that deleting does not give back.
   const summary = useMemo(() => createCleanupSummary({
-    nodeModules: nodeModules.folders.filter((folder) => (
-      nodeModules.selectedPaths.has(folder.path)
-    )),
-    buildArtifacts: buildArtifacts.targets.filter((target) => (
-      buildArtifacts.selectedPaths.has(target.path)
-    )),
+    nodeModules: nodeModules.folders
+      .filter((folder) => nodeModules.selectedPaths.has(folder.path))
+      .map(toReclaimable),
+    buildArtifacts: buildArtifacts.targets
+      .filter((target) => buildArtifacts.selectedPaths.has(target.path))
+      .map(toReclaimable),
     worktrees: mergedWorktrees.worktrees.filter((worktree) => (
       mergedWorktrees.selectedPaths.has(worktree.path)
     )),
@@ -127,8 +133,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   ]);
 
   const availableSummary = useMemo(() => createCleanupSummary({
-    nodeModules: nodeModules.folders,
-    buildArtifacts: buildArtifacts.targets,
+    nodeModules: nodeModules.folders.map(toReclaimable),
+    buildArtifacts: buildArtifacts.targets.map(toReclaimable),
     worktrees: mergedWorktrees.worktrees.filter((worktree) => (
       isSelectableWorktree(worktree) && !blockedWorktrees.has(worktree.path)
     )),
