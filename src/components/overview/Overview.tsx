@@ -27,8 +27,6 @@ interface OverviewProps {
   disk: DiskSpace | null;
   scan: HeroScan | null;
   scanLabel: string | null;
-  /** The folder scan was stopped before it finished; its lists are empty, not "nothing found". */
-  folderScanStopped: boolean;
   onNavigate: (view: View) => void;
   onChooseFolder: () => void;
 }
@@ -44,7 +42,6 @@ export function Overview({
   disk,
   scan,
   scanLabel,
-  folderScanStopped,
   onNavigate,
   onChooseFolder,
 }: OverviewProps) {
@@ -75,19 +72,26 @@ export function Overview({
       Choose Folder…
     </button>
   );
-  const projectState = (scanning: boolean, failed: boolean, what: string): CardState => {
+  const projectState = (scanning: boolean, stopped: boolean, failed: boolean, what: string): CardState => {
     if (!scanPath) return { kind: 'waiting', message: `Choose a folder to find ${what} in it.`, action: chooseFolder };
     if (scanning) return { kind: 'scanning' };
-    if (folderScanStopped) return { kind: 'failed', message: 'Scan stopped before it finished. Rescan to see these.' };
+    // Its list is empty because the scan did not finish, not because nothing was found.
+    if (stopped) return { kind: 'failed', message: 'Scan stopped before it finished. Rescan to see these.' };
     if (failed) return { kind: 'failed', message: 'The scan failed; the message above says why.' };
     return { kind: 'ready' };
   };
   const folderState = projectState(
     isScanningFolders,
+    nodeModules.wasStopped,
     Boolean(nodeModules.error) && nodeModules.folders.length === 0,
     'node_modules and build folders',
   );
-  const worktreeState = projectState(isScanningWorktrees, mergedWorktrees.scanFailed, 'merged worktrees');
+  const worktreeState = projectState(
+    isScanningWorktrees,
+    mergedWorktrees.wasStopped,
+    mergedWorktrees.scanFailed,
+    'merged worktrees',
+  );
   const cacheState: CardState = caches.isScanning ? { kind: 'scanning' } : { kind: 'ready' };
 
   const part = (state: CardState, bytes: number): HeroPart => {

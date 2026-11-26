@@ -63,8 +63,16 @@ function App() {
         subject: isScanningWorktrees ? 'node_modules, build folders and merged worktrees' : 'node_modules and build folders',
         startedAt: timing.startedAt,
         expectedMs: timing.expectedMs,
+        onStop: cleanup.stopScan,
+        isStopping: cleanup.isStopping,
       }
-      : { subject: 'merged worktrees', startedAt: timing.startedAt, expectedMs: null };
+      : {
+        subject: 'merged worktrees',
+        startedAt: timing.startedAt,
+        expectedMs: null,
+        onStop: cleanup.stopScan,
+        isStopping: cleanup.isStopping,
+      };
 
   const selection = {
     nodeModules: nodeModules.folders.filter((folder) => nodeModules.selectedPaths.has(folder.path)),
@@ -83,7 +91,6 @@ function App() {
             disk={disk}
             scan={heroScan}
             scanLabel={scanPath ? shortenHome(scanPath) : null}
-            folderScanStopped={false}
             onNavigate={setView}
             onChooseFolder={() => void cleanup.scan()}
           />
@@ -133,6 +140,7 @@ function App() {
         onBack={() => setView({ page: 'overview' })}
         scanPath={scanPath}
         isScanning={isScanning}
+        scanStopped={cleanup.scanStopped}
         listBuiltAt={cleanup.listBuiltAt}
         canRescan={!isScanning && !isDeleting}
         canChooseFolder={!isScanning && !isDeleting}

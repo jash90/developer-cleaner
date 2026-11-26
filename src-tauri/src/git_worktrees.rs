@@ -1,4 +1,5 @@
 use crate::commands::calculate_dir_size;
+use crate::scan_cancel::{ScanToken, StopCheck, SCAN_STOPPED};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -1729,10 +1730,19 @@ fn is_skipped_directory(parent: &Path, name: &str) -> bool {
 }
 
 fn discover_git_repositories(scan_path: &Path) -> Vec<PathBuf> {
+    discover_git_repositories_until(scan_path, &|| false)
+}
+
+/// The discovery walk, checking `stop` between directories; a stopped walk's partial list is
+/// discarded by the caller.
+fn discover_git_repositories_until(scan_path: &Path, stop: StopCheck) -> Vec<PathBuf> {
     let mut repositories = Vec::new();
     let mut pending = vec![scan_path.to_path_buf()];
 
     while let Some(directory) = pending.pop() {
+        if stop() {
+            break;
+        }
         if directory.join(".git").exists() {
             repositories.push(directory);
             continue;
@@ -1799,7 +1809,18 @@ fn unique_repositories(discovered: Vec<PathBuf>) -> Vec<(PathBuf, bool)> {
     unique
 }
 
+#[cfg(test)]
 fn scan_for_merged_worktrees_in(scan_path: &Path) -> Result<WorktreeScanResult, String> {
+    scan_for_merged_worktrees_until(scan_path, &|| false)
+}
+
+/// The window's scan. `stop` is checked between repositories and before each fetch and size
+/// walk; a stopped scan returns [`SCAN_STOPPED`], never a partial list. Work already running
+/// (one `git` call, one fetch with its timeout) finishes first.
+fn scan_for_merged_worktrees_until(
+    scan_path: &Path,
+    stop: StopCheck,
+) -> Result<WorktreeScanResult, String> {
     if !scan_path.exists() {
         return Err("Path does not exist".to_string());
     }
@@ -1807,7 +1828,10 @@ fn scan_for_merged_worktrees_in(scan_path: &Path) -> Result<WorktreeScanResult, 
         return Err("Path is not a directory".to_string());
     }
 
-    let repositories = unique_repositories(discover_git_repositories(scan_path));
+    let repositories = unique_repositories(discover_git_repositories_until(scan_path, stop));
+    if stop() {
+        return Err(SCAN_STOPPED.to_string());
+    }
     let repository_count = repositories.len();
 
     // Remote-tracking refs decide what counts as merged, so they are refreshed before anything
@@ -1822,7 +1846,7 @@ fn scan_for_merged_worktrees_in(scan_path: &Path) -> Result<WorktreeScanResult, 
     let fetch = || {
         repositories
             .par_iter()
-            .filter(|(_, resolvable)| *resolvable)
+            .filter(|(_, resolvable)| *resolvable && !stop())
             .filter_map(|(repository, _)| {
                 fetch_repository(repository).err().map(|error| {
                     format!(
@@ -1846,10 +1870,16 @@ fn scan_for_merged_worktrees_in(scan_path: &Path) -> Result<WorktreeScanResult, 
     let scans: Vec<(PathBuf, Result<RepositoryScan, String>)> = repositories
         .into_par_iter()
         .map(|(repository, _resolvable)| {
+            if stop() {
+                return (repository, Err(SCAN_STOPPED.to_string()));
+            }
             let scan = collect_with_bases(&repository, None);
             (repository, scan)
         })
         .collect();
+    if stop() {
+        return Err(SCAN_STOPPED.to_string());
+    }
 
     let mut diagnostics = Vec::new();
     let mut evaluated_repositories = 0;
@@ -1893,9 +1923,14 @@ fn scan_for_merged_worktrees_in(scan_path: &Path) -> Result<WorktreeScanResult, 
 
     // Walking each worktree's files is the slowest part of a scan and each walk is independent.
     // Sizes are filled in place, so the order below is still decided only by the sort.
-    worktrees
-        .par_iter_mut()
-        .for_each(|worktree| worktree.size = calculate_dir_size(Path::new(&worktree.path)));
+    worktrees.par_iter_mut().for_each(|worktree| {
+        if !stop() {
+            worktree.size = calculate_dir_size(Path::new(&worktree.path));
+        }
+    });
+    if stop() {
+        return Err(SCAN_STOPPED.to_string());
+    }
 
     if repository_count > 0 && evaluated_repositories == 0 {
         let detail = repository_errors
@@ -1982,9 +2017,13 @@ pub(crate) fn count_removable_worktrees(root: &Path, cache: &mut VerdictCache) -
 /// pool, and the command only awaits it.
 #[tauri::command]
 pub async fn scan_for_merged_worktrees(path: String) -> Result<WorktreeScanResult, String> {
-    tauri::async_runtime::spawn_blocking(move || scan_for_merged_worktrees_in(Path::new(&path)))
-        .await
-        .map_err(|error| format!("The worktree scan stopped unexpectedly: {error}"))?
+    // Taken before the work starts, so only a stop sent while this scan runs can end it.
+    let token = ScanToken::current();
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_for_merged_worktrees_until(Path::new(&path), &move || token.is_cancelled())
+    })
+    .await
+    .map_err(|error| format!("The worktree scan stopped unexpectedly: {error}"))?
 }
 
 /// Blocking for the same reason as the scan. Should the work itself die, every requested path is
@@ -2395,6 +2434,25 @@ mod tests {
             .as_deref()
             .is_some_and(|error| error.contains("uncommitted changes")));
         assert!(canonical_worktree.exists());
+    }
+
+    #[test]
+    fn a_stopped_worktree_scan_returns_no_partial_list() {
+        let id = TEST_REPO_ID.fetch_add(1, Ordering::Relaxed);
+        let scan_root = std::env::temp_dir().join(format!(
+            "node-modules-cleaner-stopped-scan-{}-{id}",
+            std::process::id()
+        ));
+        let repo = TestRepo::new_at(scan_root.join("sample-repo"));
+        repo.add_merged_worktree("feature/done");
+
+        let stopped = super::scan_for_merged_worktrees_until(&scan_root, &|| true);
+        assert_eq!(stopped.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
+        let finished = scan_for_merged_worktrees_in(&scan_root).expect("scan");
+        assert_eq!(finished.worktrees.len(), 1);
+
+        drop(repo);
+        let _ = fs::remove_dir_all(scan_root);
     }
 
     #[test]

@@ -109,6 +109,18 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const isScanningFolders = nodeModules.isScanning;
   const isScanningWorktrees = mergedWorktrees.isScanning;
   const isScanning = isSelectingDirectory || isScanningFolders || isScanningWorktrees;
+
+  // Stop ends the folder and worktree scans running now (each returns "stopped" and shows
+  // nothing partial); the caches scan is short and is left to finish. A scan started later
+  // is never affected: the backend hands each scan its own generation.
+  const [stopRequested, setStopRequested] = useState(false);
+  const isStopping = stopRequested && (isScanningFolders || isScanningWorktrees);
+  const stopScan = useCallback(() => {
+    setStopRequested(true);
+    void invoke('cancel_scan').catch(() => setStopRequested(false));
+  }, []);
+  const scanStopped = !isScanningFolders && !isScanningWorktrees
+    && (nodeModules.wasStopped || mergedWorktrees.wasStopped);
   const isDeleting = isCoordinatingDeletion
     || nodeModules.isDeleting
     || buildArtifacts.isDeleting
@@ -246,6 +258,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
 
       const path = selected as string;
       setScanPath(path);
+      setStopRequested(false);
       await runCleanupScans(path, scanNodeModules, scanMergedWorktrees);
       setListBuiltAt(Date.now());
       refreshTray();
@@ -260,6 +273,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   const rescan = useCallback(async () => {
     if (!scanPath || isScanning || isDeleting) return;
     setLastReport(null);
+    setStopRequested(false);
     await runCleanupScans(scanPath, scanNodeModules, scanMergedWorktrees);
     setListBuiltAt(Date.now());
     refreshTray();
@@ -395,6 +409,9 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     applySuggestion,
     clearSelection,
     folderScanTiming,
+    stopScan,
+    isStopping,
+    scanStopped,
     listBuiltAt,
     selectedWorktreesNeedingConsent,
     trayMismatch,

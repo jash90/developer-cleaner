@@ -9,6 +9,8 @@ interface ToolbarProps {
   onBack: () => void;
   scanPath: string | null;
   isScanning: boolean;
+  /** The last scan was stopped, so the lists are incomplete. */
+  scanStopped: boolean;
   /** When the lists were last built, for "scanned 4 min ago". */
   listBuiltAt: number;
   canRescan: boolean;
@@ -23,6 +25,7 @@ export function Toolbar({
   onBack,
   scanPath,
   isScanning,
+  scanStopped,
   listBuiltAt,
   canRescan,
   canChooseFolder,
@@ -33,7 +36,9 @@ export function Toolbar({
   const now = useNow(listBuiltAt > 0, 30_000);
   const status = isScanning
     ? 'scanning…'
-    : listBuiltAt > 0 ? `scanned ${formatRelativeTime(listBuiltAt, now)}` : null;
+    : scanStopped
+      ? 'scan stopped'
+      : listBuiltAt > 0 ? `scanned ${formatRelativeTime(listBuiltAt, now)}` : null;
 
   return (
     <header className="h-[52px] flex-none flex items-center gap-3 px-4 border-b border-slate-200 bg-white">

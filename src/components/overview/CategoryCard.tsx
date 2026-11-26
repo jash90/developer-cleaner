@@ -106,7 +106,7 @@ export function CategoryCard({
                 {totalIsEstimate && <span className="text-[11px] font-normal text-slate-500">at least </span>}
                 {formatSize(total)}
               </>
-            ) : '…'}
+            ) : state.kind === 'scanning' ? '…' : <span className="text-slate-300">—</span>}
           </div>
           {ready && selectedCount > 0 && (
             <div className="text-[11px] text-blue-700 tabular-nums">{selectedCount} selected</div>

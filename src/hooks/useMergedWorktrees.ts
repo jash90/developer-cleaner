@@ -14,6 +14,7 @@ import {
   isSelectableWorktree,
   worktreeFailures,
 } from '../utils/cleanupSummary';
+import { isScanStopped } from '../utils/scanStop';
 
 export function useMergedWorktrees() {
   const [worktrees, setWorktrees] = useState<MergedWorktree[]>([]);
@@ -23,6 +24,7 @@ export function useMergedWorktrees() {
   const [scanPath, setScanPath] = useState<string | null>(null);
   const [totalSize, setTotalSize] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [wasStopped, setWasStopped] = useState(false);
   // Distinct from `error`, which also carries per-repository warnings from a scan that worked.
   const [scanFailed, setScanFailed] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -36,6 +38,7 @@ export function useMergedWorktrees() {
     setIsScanning(true);
     setError(null);
     setScanFailed(false);
+    setWasStopped(false);
     setWorktrees([]);
     setSelectedPaths(new Set());
     setTotalSize(0);
@@ -54,8 +57,12 @@ export function useMergedWorktrees() {
         setError(`${result.warnings.length} repository warning(s). ${result.warnings[0]}`);
       }
     } catch (err) {
-      setError(`Worktree scan failed: ${err}`);
-      setScanFailed(true);
+      if (isScanStopped(err)) {
+        setWasStopped(true);
+      } else {
+        setError(`Worktree scan failed: ${err}`);
+        setScanFailed(true);
+      }
     } finally {
       setIsScanning(false);
     }
@@ -176,6 +183,7 @@ export function useMergedWorktrees() {
     worktrees,
     selectedPaths,
     isScanning,
+    wasStopped,
     isDeleting,
     scanPath,
     totalSize,

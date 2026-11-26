@@ -6,6 +6,7 @@ import {
   nodeModulesFailures,
   removeCandidatesWithinPaths,
 } from '../utils/cleanupSummary';
+import { isScanStopped } from '../utils/scanStop';
 
 export interface NodeModulesDeletion {
   results: DeleteResult[];
@@ -19,6 +20,9 @@ export function useNodeModules() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [scanPath, setScanPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Stopped by the user: the list is empty because the scan did not finish, not because
+  // nothing was found.
+  const [wasStopped, setWasStopped] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'size', direction: 'desc' });
 
   const sortedFolders = useMemo(() => {
@@ -51,6 +55,7 @@ export function useNodeModules() {
 
     setIsScanning(true);
     setError(null);
+    setWasStopped(false);
     setFolders([]);
     setSelectedPaths(new Set());
     setScanPath(path);
@@ -60,7 +65,8 @@ export function useNodeModules() {
       setFolders(result.folders);
       return result;
     } catch (err) {
-      setError(`Scan failed: ${err}`);
+      if (isScanStopped(err)) setWasStopped(true);
+      else setError(`Scan failed: ${err}`);
       return null;
     } finally {
       setIsScanning(false);
@@ -166,6 +172,7 @@ export function useNodeModules() {
     folders: sortedFolders,
     selectedPaths,
     isScanning,
+    wasStopped,
     isDeleting,
     scanPath,
     error,
