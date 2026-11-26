@@ -278,6 +278,10 @@ function installTauriMock(data) {
     }),
     tick_diagnostics: () => data.ticks,
     refresh_tray_now: () => null,
+    // Never called while capturing; here so the mock covers every command the window sends.
+    delete_build_artifacts: ({ paths }) => paths.map((path) => ({
+      success: true, path, removed_bytes: 0, error: null, failed_paths: [], sudo_hint: null,
+    })),
     // The window listens for the menu bar's counts; no event ever arrives here.
     'plugin:event|listen': () => 1,
     'plugin:event|unlisten': () => null,
