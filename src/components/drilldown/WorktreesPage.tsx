@@ -5,7 +5,7 @@ import { CATEGORIES } from '../../utils/categories';
 import { isSelectableWorktree } from '../../utils/cleanupSummary';
 import { formatSize } from '../../utils/formatSize';
 import { emptyListMessage, type ListState } from '../../utils/scanState';
-import { selectionState } from '../../utils/selection';
+import { isFilterShown, selectionState } from '../../utils/selection';
 import { isCleanWorktree } from '../../utils/suggestions';
 import { Checkbox, Chip, SizeBar } from '../ui';
 import { PageHeader, SegmentButton, TextButton } from './PageHeader';
@@ -98,7 +98,7 @@ export function WorktreesPage({
         total={total}
         description="Merged into a base branch (including squash merges). Removing deletes the files, including ignored files and untracked OS/watcher junk, and keeps the Git branch."
         controls={segments
-          .filter((item) => item.key === 'all' || count(item.key) > 0)
+          .filter((item) => isFilterShown(item.key, segment, count(item.key)))
           .map((item) => (
             <SegmentButton
               key={item.key}
