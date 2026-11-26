@@ -24,12 +24,12 @@
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="The Developer Cleaner icon and name with the tagline “Reclaim disk space from node_modules, build folders, worktrees and caches”, next to the app window listing node_modules folders and their sizes">
+  <meta property="og:image:alt" content="The Developer Cleaner icon and name with the tagline “Reclaim disk space from node_modules, build folders, worktrees and caches”, next to the app's overview: the total to reclaim, the disk bar, suggestions and four category cards">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Developer Cleaner">
   <meta name="twitter:description" content="Finds and removes node_modules, build folders, merged Git worktrees and developer caches.">
   <meta name="twitter:image" content="https://jash90.github.io/developer-cleaner/assets/og-image-en.png">
-  <meta name="twitter:image:alt" content="The Developer Cleaner icon and name next to the app window listing node_modules folders and their sizes">
+  <meta name="twitter:image:alt" content="The Developer Cleaner icon and name next to the app's overview, with the total to reclaim and four category cards">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -101,7 +101,7 @@
         <div class="window">
           <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
           <img src="../assets/screenshots/overview-desktop.webp" width="1440" height="900" fetchpriority="high"
-               alt="The main window after scanning a Projects folder: 9 node_modules folders, 10 build folders and 7 worktrees. The node_modules list shows each folder's package manager (npm, yarn, pnpm, bun), detected technologies and reclaimable size; four are selected, and the bottom bar shows 13 selected items and 7.9 GB to free.">
+               alt="The overview after scanning a Projects folder: at least 38.4 GB to reclaim, a disk bar with each category's share and the free space now (41.6 GB) and after removal (80.0 GB), a column of suggestions ordered safest first, and four cards: Build folders, Developer caches, Merged worktrees and node_modules, each with its largest items. The bottom bar shows 21 selected items and at least 23.0 GB to free.">
         </div>
       </div>
     </section>
@@ -173,28 +173,49 @@
       <div class="container">
         <div class="section-head">
           <h2 id="features-title">What it does</h2>
-          <p>One window, four panels, and a single confirmation before anything is deleted.</p>
+          <p>An overview first, then a page for each category, and one review before anything is deleted.</p>
         </div>
 
         <article class="feature">
+          <div class="feature-text">
+            <span class="feature-tag tag-gray">Overview</span>
+            <h3>The overview first, details when you want them</h3>
+            <p>
+              After a scan you see straight away how much space you can get back and where it comes from,
+              not a long list of folders to scroll through.
+            </p>
+            <ul>
+              <li>The total to reclaim and a disk bar: each category's share, the free space now and after removing everything found.</li>
+              <li>Four cards with each category's total and largest items. <strong>Review all ›</strong> opens the full list.</li>
+              <li>Suggestions, safest first. One click selects only what carries no risk, such as abandoned stores or clean, unlocked worktrees. The rest open a filtered list to review.</li>
+              <li>Cards fill in as each scan returns. Progress is measured against the last scan of the same folder, and <strong>Stop</strong> ends a scan without showing partial results.</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="../assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="The overview: the total to reclaim, a disk bar with the free space before and after removal, a column of suggestions and four category cards with their largest items.">
+          </figure>
+        </article>
+
+        <article class="feature reverse">
           <div class="feature-text">
             <span class="feature-tag tag-blue">node_modules</span>
             <h3>Fast scans, honest sizes</h3>
             <p>Point it at a folder such as <code>~/Projects</code> and Rust walks it in parallel with Rayon.</p>
             <ul>
-              <li>Each row shows what a delete actually frees, with the nominal size beside it when the two differ.</li>
+              <li>Each row shows what a delete actually frees. When the nominal size differs, hovering over the size shows it, with why the two differ.</li>
               <li>The package manager is detected from the lock file: npm, yarn, pnpm or bun.</li>
               <li>Technologies from <code>package.json</code> appear as badges: next, react, expo, @nestjs, vue, astro and more.</li>
               <li>Sort by name, size or package manager; select rows one by one or all at once.</li>
             </ul>
           </div>
           <figure class="shot">
-            <img src="../assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="The node_modules panel sorted by size. Projects on pnpm and bun show a small reclaimable size with a larger nominal size beside it.">
+            <img src="../assets/screenshots/node-modules-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="The node_modules page sorted by size, with columns for project, location, package manager, detected technologies, last change and size; four folders are selected.">
           </figure>
         </article>
 
-        <article class="feature reverse">
+        <article class="feature">
           <div class="feature-text">
             <span class="feature-tag tag-orange">Build folders</span>
             <h3>Build folders, only where their tool left them</h3>
@@ -206,17 +227,17 @@
             <ul>
               <li>A folder is offered only when the tool that made it left its marks beside and inside it: a <code>target</code> needs a <code>Cargo.toml</code> beside it and Cargo's <code>CACHEDIR.TAG</code> inside, <code>Pods</code> a <code>Podfile</code> and <code>Manifest.lock</code>, <code>coverage</code> an actual coverage report.</li>
               <li>Never when Git tracks anything inside it, so committed <code>Pods</code> and lookalike folders are left alone. The same check runs again right before the delete.</li>
-              <li>Each tool has its own group and checkbox, with what a delete costs: a Rust <code>target</code> means a full rebuild and takes the release binaries kept there with it.</li>
-              <li>Selecting every <code>node_modules</code> folder never selects a build folder.</li>
+              <li>Each tool has its own group and checkbox, with a “What you lose” note in the group's header: a Rust <code>target</code> means a full rebuild and takes the release binaries kept there with it.</li>
+              <li>Nothing selects the folders of several tools at once: not selecting every <code>node_modules</code> folder, and not the suggestions, which only open a filtered list for build folders.</li>
             </ul>
           </div>
           <figure class="shot">
             <img src="../assets/screenshots/builds-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="The Build folders section grouped by tool: Rust (Cargo) target, CocoaPods Pods, Next.js .next, Nx .nx and more. Each group has its own checkbox and a note on what a delete costs; the two .next folders are selected.">
+                 alt="The Build folders page grouped by tool: Rust (Cargo), CocoaPods, Next.js, Nx, Turborepo, Android native (CMake), Test coverage and Expo. Each group has its own checkbox and a “What you lose” note; the Next.js, Turborepo and Test coverage groups are selected.">
           </figure>
         </article>
 
-        <article class="feature">
+        <article class="feature reverse">
           <div class="feature-text">
             <span class="feature-tag tag-amber">Git worktrees</span>
             <h3>Merged worktrees, squash merges included</h3>
@@ -229,20 +250,21 @@
               <li>Recognises squash merges, GitHub's default, without leaving objects behind in the repository.</li>
               <li>Worktrees with uncommitted changes can be selected, but are removed only once you explicitly accept losing those changes. Worktrees locked by Git can't be selected.</li>
               <li>Entries whose directory is already gone are cleared with <code>git worktree prune</code>.</li>
+              <li>Filters: clean, with uncommitted changes, locked, and those left with only a Git registration.</li>
               <li>Branches are kept. Only the working directory goes.</li>
             </ul>
           </div>
           <figure class="shot">
             <img src="../assets/screenshots/worktrees-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="The Merged Git worktrees panel: branches merged and squash-merged into origin/main, origin/development and origin/develop. A worktree with uncommitted changes carries a red warning, a locked one is greyed out, and an entry whose directory is gone only clears its Git registration; the compared base branches can be expanded at the bottom.">
+                 alt="The Merged worktrees page with All, Clean, Uncommitted, Locked and Registration only filters: branches merged and squash-merged into origin/main, origin/development and origin/develop. A worktree with uncommitted changes is marked in red, a locked one is greyed out, and an entry whose directory is gone only clears its Git registration; below the list, the base branches each repository was compared with are expanded.">
           </figure>
         </article>
 
-        <article class="feature reverse">
+        <article class="feature">
           <div class="feature-text">
             <span class="feature-tag tag-sky">Developer caches</span>
             <h3>Caches outside your projects, no folder needed</h3>
-            <p>These caches live at fixed locations, so you can scan them the moment the app opens.</p>
+            <p>These caches live at fixed locations, so the app scans them as soon as it opens, before you pick a folder.</p>
             <ul>
               <li>npm (<code>_cacache</code>, <code>_npx</code>), bun, yarn Berry and Classic, old Gradle versions, superseded puppeteer builds, old Node versions under nvm.</li>
               <li>Abandoned pnpm stores left behind when pnpm moved its default location, told apart from the store it uses today.</li>
@@ -253,21 +275,23 @@
           </div>
           <figure class="shot">
             <img src="../assets/screenshots/caches-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="The Developer caches panel grouped into abandoned stores and package manager caches. Each entry shows its cleanup method (delete, pnpm store prune, uv cache prune), how long it has been untouched, and its size.">
+                 alt="The Developer caches page grouped into abandoned stores, package manager caches, superseded runtimes and unrotated logs. Each entry shows its cleanup method (delete, pnpm store prune, uv cache prune, empty in place), how long it has been untouched, its size and its note; after Select safe, everything is selected except the Node version marked “read the note”.">
           </figure>
         </article>
 
-        <article class="feature">
+        <article class="feature reverse">
           <div class="feature-text">
             <span class="feature-tag tag-gray">Safety</span>
-            <h3>One confirmation, with a summary</h3>
+            <h3>One review before anything is removed</h3>
             <p>
-              Everything you select, <code>node_modules</code>, build folders, worktrees and caches alike, goes
-              with one <strong>Remove Selected</strong>, after a single confirmation that tells you how many of
-              each you're removing and how much space comes back.
+              Everything you select on any screen, <code>node_modules</code>, build folders, worktrees and caches
+              alike, ends up in one <strong>Review and Remove…</strong> panel. It shows each category with its
+              count and the space it frees, and you can still untick any item there.
             </p>
             <ul>
-              <li>Worktrees with uncommitted changes are named in the confirmation, and the remove button stays disabled until you tick that their changes will be permanently lost.</li>
+              <li>For build folders the panel repeats what you lose for each selected tool, and for caches their notes.</li>
+              <li>Worktrees with uncommitted changes are named in a box pinned above the buttons. <strong>Remove and discard changes</strong> stays disabled until you tick that those changes will be permanently lost, and <strong>Keep Everything</strong> is the default button.</li>
+              <li>When the list of such worktrees changes, for example after you untick one of them, consent has to be given again.</li>
               <li>That consent covers only the worktrees listed. A worktree that was clean at scan time and has changes by the time you click Remove is still refused.</li>
               <li>Removal is refused if a worktree gained a commit after the scan.</li>
               <li>OS and watcher junk (<code>.DS_Store</code>, watchman cookies) is reported separately: it isn't work, even though it makes <code>git worktree remove</code> refuse.</li>
@@ -276,12 +300,12 @@
             </ul>
           </div>
           <figure class="shot">
-            <img src="../assets/screenshots/confirm-consent-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="The “Remove selected items?” confirmation: 4 node_modules folders, 4 build folders, 6 worktrees and 8 caches, at least 24.5 GB to free. A red box names the worktree with uncommitted changes, and “Remove and discard changes” stays disabled until the loss is acknowledged.">
+            <img src="../assets/screenshots/review-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="The “Review 22 items” panel: 4 node_modules folders, 4 build folders with what a delete costs for Next.js, Turborepo and Test coverage, 8 caches with their notes, at least 24.5 GB to free. A red box above the buttons names the worktree with uncommitted changes, and “Remove and discard changes” stays disabled until the loss is acknowledged.">
           </figure>
         </article>
 
-        <article class="feature reverse">
+        <article class="feature">
           <div class="feature-text">
             <span class="feature-tag tag-blue">Menu bar</span>
             <h3>Runs quietly from the menu bar</h3>
@@ -314,25 +338,26 @@
         <ol class="steps">
           <li>
             <h3>Pick a folder</h3>
-            <p>Click <strong>Select Folder</strong> and choose the directory that holds your projects.</p>
+            <p>Click <strong>Choose Folder…</strong> and pick the directory that holds your projects.</p>
           </li>
           <li>
             <h3>Let it scan</h3>
-            <p>A single scan finds <code>node_modules</code> folders, build folders and merged worktrees.</p>
+            <p>A single scan finds <code>node_modules</code> folders, build folders and merged worktrees. Cards fill in as each scan returns, and <strong>Stop</strong> ends it.</p>
           </li>
           <li>
             <h3>Review the results</h3>
-            <p><code>node_modules</code> comes first, then build folders grouped by tool, then worktrees. Tick whatever you don't need.</p>
+            <p>The overview shows the total, suggestions and each category's largest items; <strong>Review all ›</strong> shows the full list. Tick whatever you don't need.</p>
           </li>
           <li>
             <h3>Remove the selection</h3>
-            <p>Click <strong>Remove Selected</strong> and confirm. Every panel, caches included, is cleaned in one go.</p>
+            <p>Click <strong>Review and Remove…</strong>, go over the collected selection and confirm. Every category, caches included, is cleaned in one go.</p>
           </li>
         </ol>
         <p class="note">
-          <strong>Developer caches</strong> need no folder. Click <strong>Scan caches</strong>, go through the groups,
-          and check how each entry will be cleaned: deleted, emptied in place, or handed to the owning tool's
-          <code>prune</code> command. Selected caches are cleaned by the same <strong>Remove Selected</strong>.
+          <strong>Developer caches</strong> need no folder: the app scans them at launch, and <strong>Rescan caches</strong>
+          scans them again. Go through the groups and check how each entry will be cleaned: deleted, emptied in
+          place, or handed to the owning tool's <code>prune</code> command. Selected caches go to the same
+          <strong>Review and Remove…</strong>.
         </p>
       </div>
     </section>
@@ -345,52 +370,59 @@
         </div>
         <ul class="gallery">
           <li>
-            <a href="../assets/screenshots/empty-desktop.webp" data-lightbox data-caption="Start screen">
+            <a href="../assets/screenshots/empty-desktop.webp" data-lightbox data-caption="Before a folder is picked">
               <img src="../assets/screenshots/empty-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="The start screen before a folder is picked, with an empty Developer caches panel and a Scan caches button.">
-              <span>Start screen</span>
+                   alt="The overview before a folder is picked: developer caches scanned at launch, and the other categories' cards with a Choose Folder… button.">
+              <span>Before a folder is picked</span>
             </a>
           </li>
           <li>
-            <a href="../assets/screenshots/overview-desktop.webp" data-lightbox data-caption="node_modules scan results">
+            <a href="../assets/screenshots/scanning-desktop.webp" data-lightbox data-caption="Scan in progress">
+              <img src="../assets/screenshots/scanning-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="The overview during a scan: a progress bar measured against the last scan (“of about 0:48”) with a Stop button, the worktree card already filled in, and the node_modules and build folder cards waiting for their results.">
+              <span>Scan in progress</span>
+            </a>
+          </li>
+          <li>
+            <a href="../assets/screenshots/overview-desktop.webp" data-lightbox data-caption="Overview after a scan">
               <img src="../assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Scan results: a list of node_modules folders with sizes and selection.">
-              <span>node_modules scan results</span>
+                   alt="The overview after a scan: the total to reclaim, the disk bar, suggestions and four category cards with selected items.">
+              <span>Overview after a scan</span>
+            </a>
+          </li>
+          <li>
+            <a href="../assets/screenshots/node-modules-desktop.webp" data-lightbox data-caption="node_modules">
+              <img src="../assets/screenshots/node-modules-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="The node_modules page with package manager, detected technologies, last change and size; four folders are selected.">
+              <span>node_modules</span>
             </a>
           </li>
           <li>
             <a href="../assets/screenshots/builds-desktop.webp" data-lightbox data-caption="Build folders">
               <img src="../assets/screenshots/builds-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Build folders grouped by tool, with what a delete costs for each group.">
+                   alt="Build folders grouped by tool, with a “What you lose” note in each group's header.">
               <span>Build folders</span>
             </a>
           </li>
           <li>
             <a href="../assets/screenshots/worktrees-desktop.webp" data-lightbox data-caption="Merged Git worktrees">
               <img src="../assets/screenshots/worktrees-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Merged worktrees, with a warning on uncommitted changes, a locked entry and the base branches that were compared.">
+                   alt="Merged worktrees with filters, uncommitted changes marked, a locked entry and the base branches that were compared.">
               <span>Merged Git worktrees</span>
             </a>
           </li>
           <li>
             <a href="../assets/screenshots/caches-desktop.webp" data-lightbox data-caption="Developer caches">
               <img src="../assets/screenshots/caches-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Developer caches grouped by kind, each with its cleanup method.">
+                   alt="Developer caches grouped by kind, each with its cleanup method and note.">
               <span>Developer caches</span>
             </a>
           </li>
           <li>
-            <a href="../assets/screenshots/confirm-desktop.webp" data-lightbox data-caption="Removal confirmation">
-              <img src="../assets/screenshots/confirm-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="The confirmation dialog with node_modules, build folder, worktree and cache counts and the space to free.">
-              <span>Removal confirmation</span>
-            </a>
-          </li>
-          <li>
-            <a href="../assets/screenshots/confirm-consent-desktop.webp" data-lightbox data-caption="Consent to lose uncommitted changes">
-              <img src="../assets/screenshots/confirm-consent-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="The confirmation with a worktree that has uncommitted changes: the remove button waits for the loss of those changes to be acknowledged.">
-              <span>Consent to lose changes</span>
+            <a href="../assets/screenshots/review-desktop.webp" data-lightbox data-caption="Review before removal">
+              <img src="../assets/screenshots/review-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="The review panel with the selection from every screen; the remove button waits for consent to lose the uncommitted changes in one worktree.">
+              <span>Review before removal</span>
             </a>
           </li>
           <li>
@@ -427,12 +459,6 @@
               <li><strong>Windows:</strong> click “More info” → “Run anyway”.</li>
               <li><strong>Linux:</strong> the tray needs <code>libayatana-appindicator3</code> (the <code>.deb</code> declares it). Without it the app still starts, just without the tray.</li>
             </ul>
-            <p data-former-name>
-              <strong>Updating from Node Modules Cleaner?</strong> That was this app's name up to version 1.7.
-              Settings carry over. On macOS the new version installs as <code>Developer Cleaner.app</code>, so the
-              old <code>Node Modules Cleaner.app</code> can be deleted. On Linux, remove the old
-              <code>node-modules-cleaner</code> package. On Windows the update replaces the old install.
-            </p>
           </div>
           <div class="card">
             <h3>Build from source</h3>
