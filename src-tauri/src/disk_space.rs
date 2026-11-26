@@ -28,17 +28,19 @@ fn nearest_existing(path: &Path) -> Option<&Path> {
 
 /// Space on the volume holding `path`, chosen from `volumes`.
 ///
-/// The path is matched as given first and only then canonicalized: on Windows `canonicalize`
-/// returns a verbatim `\\?\C:\…` path that no longer prefix-matches the `C:\` mount point, while
-/// on Unix it resolves symlinks and relative paths that would otherwise match the wrong volume.
+/// The canonical path is matched first: on Unix it resolves symlinks, and a link into another
+/// volume would otherwise match `/`, which holds every path. The path as given is the fallback
+/// for Windows, where `canonicalize` returns a verbatim `\\?\C:\…` path that no longer
+/// prefix-matches the `C:\` mount point.
 pub fn disk_space_for(path: &Path, volumes: &[Volume]) -> Result<DiskSpace, String> {
     let existing = nearest_existing(path)
         .ok_or_else(|| format!("No existing folder found for {}", path.display()))?;
 
-    let mut candidates: Vec<PathBuf> = vec![existing.to_path_buf()];
+    let mut candidates: Vec<PathBuf> = Vec::with_capacity(2);
     if let Ok(canonical) = existing.canonicalize() {
         candidates.push(canonical);
     }
+    candidates.push(existing.to_path_buf());
 
     let volume = candidates
         .iter()
@@ -122,6 +124,29 @@ mod tests {
     fn an_empty_path_is_an_error() {
         let error = disk_space_for(Path::new(""), &read_volumes()).unwrap_err();
         assert!(error.contains("No existing folder"), "{error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_into_another_volume_reports_the_volume_it_points_to() {
+        let base = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("disk-space-symlink-{}", std::process::id()));
+        let target = base.join("other-volume").join("projects");
+        let link = base.join("home").join("projects");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let other_volume = base.join("other-volume").to_string_lossy().to_string();
+        let volumes = [volume("/", 10, 100), volume(&other_volume, 30, 300)];
+
+        let space = disk_space_for(&link, &volumes);
+        std::fs::remove_dir_all(&base).unwrap();
+
+        let space = space.unwrap();
+        assert_eq!(space.mount_point, other_volume);
+        assert_eq!(space.total_bytes, 300);
     }
 
     #[test]
