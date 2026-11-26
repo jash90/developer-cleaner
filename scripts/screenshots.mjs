@@ -10,7 +10,8 @@
 // headless Chromium, and that bridge is replaced with fixtures: every path, project and
 // branch below is fictional, so no real machine data can leak into the images.
 //
-// Output is WebP when `cwebp` is on PATH (brew install webp), PNG otherwise.
+// Output is WebP, which the pages reference, so `cwebp` must be on PATH (brew install webp).
+// Without it the script stops before writing anything.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, statSync } from 'node:fs';
@@ -344,24 +345,22 @@ function installTauriMock(data) {
 // Capture
 // ---------------------------------------------------------------------------
 
-const hasCwebp = spawnSync('cwebp', ['-version']).status === 0;
 const written = [];
 
 async function save(page, name, options = {}) {
   const png = join(tmpDir, `${name}.png`);
   await page.screenshot({ path: png, ...options });
-  let file;
-  if (hasCwebp) {
-    file = join(outDir, `${name}.webp`);
-    execFileSync('cwebp', ['-quiet', '-q', '82', '-m', '6', png, '-o', file]);
-  } else {
-    file = join(outDir, `${name}.png`);
-    execFileSync('cp', [png, file]);
-  }
+  const file = join(outDir, `${name}.webp`);
+  execFileSync('cwebp', ['-quiet', '-q', '82', '-m', '6', png, '-o', file]);
   written.push(file);
 }
 
 async function main() {
+  // PNG fallbacks would sit unused next to stale WebP files the pages still show.
+  if (spawnSync('cwebp', ['-version']).status !== 0) {
+    console.error('cwebp not found on PATH. Install it (brew install webp) and run again; nothing was written.');
+    process.exit(1);
+  }
   rmSync(tmpDir, { recursive: true, force: true });
   mkdirSync(tmpDir, { recursive: true });
   mkdirSync(outDir, { recursive: true });
