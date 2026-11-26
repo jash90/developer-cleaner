@@ -212,9 +212,12 @@ function packageManagerCaches(caches: SuggestionCache[]): Suggestion | null {
   const matching = caches.filter((cache) => cache.kind === 'package_manager');
   if (matching.length === 0) return null;
   const withNote = matching.filter((cache) => cache.safety === 'needs_review' || cache.note);
+  // Names a few; past that a list of paths is harder to read than a count.
   const noteText = withNote.length === 0
     ? ''
-    : ` ${joinWords(withNote.map((cache) => cache.label))} ${withNote.length === 1 ? 'has a note' : 'have notes'} to read first.`;
+    : withNote.length > 2
+      ? ` ${withNote.length} of them have notes to read first.`
+      : ` ${joinWords(withNote.map((cache) => cache.label))} ${withNote.length === 1 ? 'has a note' : 'have notes'} to read first.`;
   return {
     id: 'package-manager-caches',
     category: 'caches',

@@ -220,6 +220,15 @@ test("package manager caches are review only, name their notes and flag prune es
   assert.equal(suggestion.why, "Re-downloaded on demand. Gradle caches has a note to read first.");
 });
 
+test("past two caches with notes, the package manager suggestion counts them", () => {
+  const noted = (path) => cache(path, "package_manager", { note: "Read me." });
+  const suggestion = byId(computeSuggestions(input({
+    caches: [noted("/c/a"), noted("/c/b"), noted("/c/c")],
+  })), "package-manager-caches");
+
+  assert.equal(suggestion.why, "Re-downloaded on demand. 3 of them have notes to read first.");
+});
+
 test("guardSelection drops rows that stopped passing the rule since the suggestion", () => {
   const [stores, worktrees] = computeSuggestions(input({
     worktrees: [worktree("/w/a"), worktree("/w/b"), worktree("/w/c")],
