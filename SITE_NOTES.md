@@ -36,7 +36,7 @@ Developerzy JavaScript/TypeScript (i szerzej: każdy, kto trzyma dużo repozytor
 | Wykrywanie technologii z `package.json` (top packages) | `commands.rs`, `NodeModulesPage.tsx` |
 | Sortowanie po nazwie, rozmiarze, menedżerze (nagłówki kolumn) | `NodeModulesPage.tsx`, `useNodeModules.ts` |
 | Przegląd: suma do odzyskania (każdy bajt liczony raz), pasek dysku z wolnym miejscem teraz i po usunięciu, cztery karty z największymi pozycjami, karty wypełniane w miarę powrotu skanów, postęp względem poprzedniego skanu folderu, Stop (`cancel_scan`) | `Overview.tsx`, `Hero.tsx`, `CategoryCard.tsx`, `disk_space.rs`, `scan_cancel.rs` |
-| Sugestie od najbezpieczniejszych; „Select” tylko dla pozycji bez ryzyka z jednej kategorii (porzucone store'y, czyste niezablokowane worktree), reszta otwiera przefiltrowaną listę | `utils/suggestions.ts` (testy: `suggestions.test.mjs`), `SuggestionList.tsx` |
+| Sugestie od najbezpieczniejszych; „Select” tylko dla pozycji o niskim ryzyku z jednej kategorii (porzucone store'y, czyste niezablokowane worktree), reszta otwiera przefiltrowaną listę | `utils/suggestions.ts` (testy: `suggestions.test.mjs`), `SuggestionList.tsx` |
 | Foldery buildów: grupy per narzędzie, każda z własnym polem wyboru i notą „What you lose”; nic nie zaznacza kilku narzędzi naraz | `build_artifacts.rs`, `BuildFoldersPage.tsx`, `useBuildArtifacts.ts` |
 | Zmergowane worktree: porównanie z `origin/HEAD`, `main`, `master`, `development`, `develop`; wykrywanie squash merge; brudne da się zaznaczyć (od 1.6.0), zablokowanych nie; wpisy „stale” czyszczone `git worktree prune`; gałęzie zostają | `git_worktrees.rs`, `WorktreesPage.tsx` |
 | Cache deweloperskie: npm (`_cacache`, `_npx`), pnpm (aktywny store → `pnpm store prune`, porzucone store'y), bun, yarn (Berry i Classic), uv (`uv cache prune`), Gradle (stare wersje), puppeteer (stare buildy), nvm (stare wersje Node), logi Homebrew (opróżniane w miejscu); skanowane przy starcie aplikacji | `dev_caches.rs`, `CachesPage.tsx`, `useDevCaches.ts` |
@@ -61,7 +61,7 @@ Brak. Interfejs aplikacji jest tylko po angielsku (napisy wprost w komponentach,
 ## Identyfikacja wizualna
 
 - Logo/ikona: `src-tauri/icons/app-icon.png`, `128x128.png` (wygenerowana ikona z commita `ab03be0`).
-- Kolory (Tailwind w komponentach): tło `gray-50`, akcent główny `blue-600` (przycisk Select Folder), `orange` dla folderów buildów, `amber` dla worktree, `sky` dla cache, `red-600` dla akcji destrukcyjnych, `green-600` dla odzyskanego miejsca.
+- Kolory (Tailwind w komponentach): tło `gray-50`, akcent główny `blue-600` (przycisk Choose Folder…), `orange` dla folderów buildów, `amber` dla worktree, `sky` dla cache, `red-600` dla akcji destrukcyjnych, `green-600` dla odzyskanego miejsca.
 - Font: systemowy stos (`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, …` — `src/index.css`).
 - Aplikacja nie ma trybu ciemnego — strona ma, z tą samą paletą.
 
