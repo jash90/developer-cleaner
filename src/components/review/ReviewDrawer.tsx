@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BuildArtifact, CacheTarget, MergedWorktree, NodeModulesFolder } from '../../types';
 import { BUILD_KINDS, CATEGORIES, cacheMethodLabel, shortenHome } from '../../utils/categories';
 import { categoryTotals } from '../../utils/cleanupSummary';
@@ -31,6 +31,8 @@ interface ReviewDrawerProps {
   onClose: () => void;
 }
 
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
 export function ReviewDrawer(props: ReviewDrawerProps) {
   return props.isOpen ? <ReviewDrawerBody {...props} /> : null;
 }
@@ -46,13 +48,47 @@ function ReviewDrawerBody({
   onConfirm,
   onClose,
 }: ReviewDrawerProps) {
+  const panel = useRef<HTMLElement>(null);
+  // Taken while rendering, before "Keep Everything" takes focus, so closing can give it back.
+  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // A modal keeps Tab and Shift+Tab inside it; the page behind stays out of reach.
+      if (event.key !== 'Tab' || !panel.current) return;
+      const focusable = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const inside = active !== null && panel.current.contains(active);
+      if (event.shiftKey && (active === first || !inside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !inside)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // Deferred, so the remount StrictMode does in development does not pull focus out.
+      setTimeout(() => {
+        if (!mounted.current && opener?.isConnected) opener.focus();
+      }, 0);
+    };
+  }, [opener]);
 
   const toCandidate = (item: { path: string; reclaimable_size: number }) => ({
     path: item.path,
@@ -76,6 +112,7 @@ function ReviewDrawerBody({
     <div className="fixed inset-0 z-40">
       <button type="button" aria-label="Close review" className="absolute inset-0 bg-black/20" onClick={onClose} />
       <aside
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="review-title"
@@ -90,7 +127,13 @@ function ReviewDrawerBody({
           </p>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 text-[12.5px]">
+        {/* A tab stop of its own, so the list scrolls from the keyboard and the focus trap knows it. */}
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Selected items"
+          className="flex-1 min-h-0 overflow-y-auto px-5 text-[12.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
+        >
           {totalCount === 0 && <p className="py-6 text-slate-500">Nothing is selected.</p>}
           <ReviewGroup
             title="node_modules"
