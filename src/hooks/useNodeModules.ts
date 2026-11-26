@@ -87,6 +87,17 @@ export function useNodeModules() {
     setSelectedPaths(new Set());
   }, []);
 
+  /** Tick or untick the given rows (e.g. the ones a filter shows), leaving the rest alone. */
+  const setPathsSelected = useCallback((paths: string[], selected: boolean) => {
+    const known = new Set(folders.map((folder) => folder.path));
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      paths.filter((path) => known.has(path))
+        .forEach((path) => (selected ? next.add(path) : next.delete(path)));
+      return next;
+    });
+  }, [folders]);
+
   const deleteSelected = useCallback(async (
     paths: string[],
   ): Promise<NodeModulesDeletion> => {
@@ -163,6 +174,7 @@ export function useNodeModules() {
     toggleSelection,
     selectAll,
     deselectAll,
+    setPathsSelected,
     deleteSelected,
     reconcileAfterCleanup,
     setSort,

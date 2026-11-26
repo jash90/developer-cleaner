@@ -47,12 +47,22 @@ export function useBuildArtifacts() {
     });
   }, []);
 
-  /** Select or clear every folder of one kind, leaving the other kinds as they are. */
-  const setKindSelected = useCallback((kind: ArtifactKind, selected: boolean) => {
-    const ofKind = targets.filter((target) => target.kind === kind).map((target) => target.path);
+  /**
+   * Tick or untick folders of one kind — the ones its group shows — leaving the other kinds as
+   * they are. Paths of any other kind are ignored, so no call can select across kinds.
+   */
+  const setKindPathsSelected = useCallback((
+    kind: ArtifactKind,
+    paths: string[],
+    selected: boolean,
+  ) => {
+    const ofKind = new Set(
+      targets.filter((target) => target.kind === kind).map((target) => target.path),
+    );
     setSelectedPaths((prev) => {
       const next = new Set(prev);
-      ofKind.forEach((path) => (selected ? next.add(path) : next.delete(path)));
+      paths.filter((path) => ofKind.has(path))
+        .forEach((path) => (selected ? next.add(path) : next.delete(path)));
       return next;
     });
   }, [targets]);
@@ -110,7 +120,7 @@ export function useBuildArtifacts() {
     error,
     replace,
     toggleSelection,
-    setKindSelected,
+    setKindPathsSelected,
     deselectAll,
     deleteSelected,
     reconcileAfterCleanup,

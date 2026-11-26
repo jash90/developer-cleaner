@@ -88,6 +88,24 @@ export function useMergedWorktrees() {
     setSelectedPaths(new Set());
   }, []);
 
+  /**
+   * Tick or untick the given rows (e.g. the ones a filter shows). Locked and blocked rows are
+   * never ticked, as with `selectAll`.
+   */
+  const setPathsSelected = useCallback((paths: string[], selected: boolean) => {
+    const allowed = new Set(worktrees
+      .filter((worktree) => isSelectableWorktree(worktree) && !blockedReasons.has(worktree.path))
+      .map((worktree) => worktree.path));
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      paths.forEach((path) => {
+        if (!selected) next.delete(path);
+        else if (allowed.has(path)) next.add(path);
+      });
+      return next;
+    });
+  }, [blockedReasons, worktrees]);
+
   const deleteSelected = useCallback(async (
     selectedWorktrees: MergedWorktree[],
     deletedFolders: CleanupCandidate[],
@@ -170,6 +188,7 @@ export function useMergedWorktrees() {
     toggleSelection,
     selectAll,
     deselectAll,
+    setPathsSelected,
     deleteSelected,
     clearError: () => setError(null),
   };
