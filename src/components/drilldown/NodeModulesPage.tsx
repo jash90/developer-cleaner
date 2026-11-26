@@ -2,6 +2,7 @@ import type { useNodeModules } from '../../hooks/useNodeModules';
 import type { SortField } from '../../types';
 import { CATEGORIES, formatAgeShort, relativeTo } from '../../utils/categories';
 import { formatSize } from '../../utils/formatSize';
+import { emptyListMessage, type ListState } from '../../utils/scanState';
 import { selectionState } from '../../utils/selection';
 import { Checkbox, SizeBar } from '../ui';
 import { PageHeader, TextButton } from './PageHeader';
@@ -9,6 +10,8 @@ import { PageHeader, TextButton } from './PageHeader';
 interface NodeModulesPageProps {
   nodeModules: ReturnType<typeof useNodeModules>;
   scanPath: string | null;
+  /** Whether the list is a finished scan's answer, so an empty one is not read as "none found". */
+  state: ListState;
   selectionDisabled: boolean;
 }
 
@@ -40,7 +43,7 @@ function SortHeader({
   );
 }
 
-export function NodeModulesPage({ nodeModules, scanPath, selectionDisabled }: NodeModulesPageProps) {
+export function NodeModulesPage({ nodeModules, scanPath, state, selectionDisabled }: NodeModulesPageProps) {
   const { folders, selectedPaths, sortConfig, setSort } = nodeModules;
   const paths = folders.map((folder) => folder.path);
   const header = selectionState(paths, selectedPaths);
@@ -78,7 +81,9 @@ export function NodeModulesPage({ nodeModules, scanPath, selectionDisabled }: No
           <SortHeader field="size" label="Size" sort={sortConfig} onSort={setSort} align="right" />
         </div>
         {folders.length === 0 && (
-          <p className="px-6 py-10 text-center text-slate-500">No node_modules folders in this folder.</p>
+          <p className="px-6 py-10 text-center text-slate-500">
+            {emptyListMessage(state, 'node_modules folders', 'No node_modules folders in this folder.')}
+          </p>
         )}
         {folders.map((folder) => {
           const selected = selectedPaths.has(folder.path);

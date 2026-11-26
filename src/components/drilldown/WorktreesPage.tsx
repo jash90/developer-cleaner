@@ -4,6 +4,7 @@ import type { MergedWorktree } from '../../types';
 import { CATEGORIES } from '../../utils/categories';
 import { isSelectableWorktree } from '../../utils/cleanupSummary';
 import { formatSize } from '../../utils/formatSize';
+import { emptyListMessage, type ListState } from '../../utils/scanState';
 import { selectionState } from '../../utils/selection';
 import { isCleanWorktree } from '../../utils/suggestions';
 import { Checkbox, Chip, SizeBar } from '../ui';
@@ -13,6 +14,8 @@ interface WorktreesPageProps {
   mergedWorktrees: ReturnType<typeof useMergedWorktrees>;
   total: number;
   trayMismatch: { trayCount: number; windowCount: number } | null;
+  /** Whether the list is a finished scan's answer, so an empty one is not read as "none found". */
+  state: ListState;
   onRescan: () => void;
   busy: boolean;
   selectionDisabled: boolean;
@@ -56,6 +59,7 @@ export function WorktreesPage({
   mergedWorktrees,
   total,
   trayMismatch,
+  state,
   onRescan,
   busy,
   selectionDisabled,
@@ -140,7 +144,11 @@ export function WorktreesPage({
         {visible.length === 0 && (
           <p className="px-6 py-10 text-center text-slate-500">
             {worktrees.length === 0
-              ? 'No merged worktrees found. Branches are compared with each repository’s remote base branches.'
+              ? emptyListMessage(
+                state,
+                'merged worktrees',
+                'No merged worktrees found. Branches are compared with each repository’s remote base branches.',
+              )
               : 'No worktrees in this group.'}
           </p>
         )}

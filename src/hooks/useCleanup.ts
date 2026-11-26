@@ -23,6 +23,7 @@ import { formatSize } from '../utils/formatSize';
 import { isPruneTarget } from '../utils/categories';
 import { computeSuggestions, guardSelection, type Suggestion } from '../utils/suggestions';
 import { createStopGate } from '../utils/scanStop';
+import { listState } from '../utils/scanState';
 import { readLastScanDuration, saveLastScanDuration } from './scanTiming';
 import type { TrayStats, WorktreeDeleteResult } from '../types';
 
@@ -128,6 +129,19 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   }, [stopGate]);
   const scanStopped = !isScanningFolders && !isScanningWorktrees
     && (nodeModules.wasStopped || mergedWorktrees.wasStopped);
+  // Whether each list is a finished answer; an empty list means "none found" only when ready.
+  const folderListState = listState({
+    scanPath,
+    scanning: isScanningFolders,
+    stopped: nodeModules.wasStopped,
+    failed: Boolean(nodeModules.error) && nodeModules.folders.length === 0,
+  });
+  const worktreeListState = listState({
+    scanPath,
+    scanning: isScanningWorktrees,
+    stopped: mergedWorktrees.wasStopped,
+    failed: mergedWorktrees.scanFailed,
+  });
   const isDeleting = isCoordinatingDeletion
     || nodeModules.isDeleting
     || buildArtifacts.isDeleting
@@ -423,6 +437,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     stopScan,
     isStopping,
     scanStopped,
+    folderListState,
+    worktreeListState,
     listBuiltAt,
     foldersListedAt,
     selectedWorktreesNeedingConsent,

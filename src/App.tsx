@@ -97,7 +97,12 @@ function App() {
         );
       case 'node':
         return (
-          <NodeModulesPage nodeModules={nodeModules} scanPath={scanPath} selectionDisabled={projectSelectionDisabled} />
+          <NodeModulesPage
+            nodeModules={nodeModules}
+            scanPath={scanPath}
+            state={cleanup.folderListState}
+            selectionDisabled={projectSelectionDisabled}
+          />
         );
       case 'build':
         return (
@@ -106,6 +111,7 @@ function App() {
             filter={view.filter}
             listBuiltAt={cleanup.foldersListedAt}
             scanPath={scanPath}
+            state={cleanup.folderListState}
             selectionDisabled={projectSelectionDisabled}
             onClearFilter={() => setView({ page: 'build', filter: null })}
           />
@@ -116,6 +122,7 @@ function App() {
             mergedWorktrees={mergedWorktrees}
             total={cleanup.totals.worktrees}
             trayMismatch={cleanup.trayMismatch}
+            state={cleanup.worktreeListState}
             onRescan={() => void cleanup.rescan()}
             busy={isScanning || isDeleting}
             selectionDisabled={projectSelectionDisabled}

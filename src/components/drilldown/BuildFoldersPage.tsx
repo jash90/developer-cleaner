@@ -2,6 +2,7 @@ import type { useBuildArtifacts } from '../../hooks/useBuildArtifacts';
 import type { BuildArtifact } from '../../types';
 import { BUILD_KINDS, CATEGORIES, formatAgeShort, relativeTo } from '../../utils/categories';
 import { formatSize } from '../../utils/formatSize';
+import { emptyListMessage, type ListState } from '../../utils/scanState';
 import { selectionState } from '../../utils/selection';
 import { isUntouchedFor } from '../../utils/suggestions';
 import { Checkbox, SizeBar } from '../ui';
@@ -14,6 +15,8 @@ interface BuildFoldersPageProps {
   /** When the list was built, so "untouched for" means the same as in the suggestion. */
   listBuiltAt: number;
   scanPath: string | null;
+  /** Whether the list is a finished scan's answer, so an empty one is not read as "none found". */
+  state: ListState;
   selectionDisabled: boolean;
   onClearFilter: () => void;
 }
@@ -25,6 +28,7 @@ export function BuildFoldersPage({
   filter,
   listBuiltAt,
   scanPath,
+  state,
   selectionDisabled,
   onClearFilter,
 }: BuildFoldersPageProps) {
@@ -60,7 +64,9 @@ export function BuildFoldersPage({
       />
       <main className="flex-1 min-h-0 overflow-y-auto">
         {groups.length === 0 && (
-          <p className="px-6 py-10 text-center text-slate-500">No build folders to show.</p>
+          <p className="px-6 py-10 text-center text-slate-500">
+            {emptyListMessage(state, 'build folders', 'No build folders to show.')}
+          </p>
         )}
         {groups.map((group) => {
           const paths = group.items.map((artifact) => artifact.path);
