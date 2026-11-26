@@ -117,14 +117,36 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: v__VERSION__
-          releaseName: 'Node Modules Cleaner v__VERSION__'
+          releaseName: 'Developer Cleaner v__VERSION__'
           releaseBody: |
-            ## Node Modules Cleaner
+            ## Developer Cleaner
 
-            Desktop application for reclaiming disk space from `node_modules` folders,
-            merged Git worktrees, and shared developer caches.
+            Desktop application for reclaiming disk space from `node_modules` folders, build
+            folders, merged Git worktrees, and shared developer caches.
 
-            ### Finding and removing what is really there, with one Remove button
+            ### Build folders, and a new name
+            - **Node Modules Cleaner is now Developer Cleaner.** Settings carry over. On macOS the
+              new version installs as `Developer Cleaner.app`, so the old `Node Modules Cleaner.app`
+              can be deleted; on Linux the package is now `developer-cleaner`, so remove the old
+              `node-modules-cleaner` package. On Windows the update replaces the old install
+            - A new **Build folders** section finds build output and tool caches inside your
+              projects in the same scan: Rust/Cargo `target`, CocoaPods `Pods`, Next.js `.next`,
+              Nx `.nx`, Turborepo `.turbo`, Android native `.cxx`, test `coverage` and Expo `.expo`.
+              On a folder of about 230 projects that was 31 GB of Pods, `.next` and caches, plus
+              64 GB of Rust `target` folders
+            - A folder is offered only when the tool that made it left its marks — a `target` needs
+              a `Cargo.toml` beside it and Cargo's `CACHEDIR.TAG` inside, `Pods` a `Podfile` and
+              `Manifest.lock`, `coverage` an actual coverage report — and never when Git tracks
+              anything inside it, so committed `Pods` and lookalike folders are left alone. The check
+              runs again right before each delete
+            - Each tool has its own group and checkbox, with what a delete costs (a Rust `target`
+              means a full rebuild and takes release binaries and bundles kept there with it), so
+              selecting the cheap ones never sweeps in the expensive ones
+            - Removing a worktree with uncommitted changes now takes an explicit second step: the
+              confirmation lists those worktrees and the remove button stays disabled until you
+              tick that their changes will be permanently lost
+
+            ### Finding and removing what is really there, with one Remove button (1.7.0)
             - **Remove Selected** now also cleans the developer caches you tick, so the separate
               "Clean selected" button is gone. One confirmation lists every category with the total
               it frees, and a failure in one category no longer stops the others: the result says,

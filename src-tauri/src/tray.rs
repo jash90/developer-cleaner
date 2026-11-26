@@ -237,10 +237,10 @@ fn tray_title(stats: &TrayStats) -> Option<String> {
 
 fn tray_tooltip(stats: &TrayStats) -> String {
     if stats.folders.is_empty() {
-        return "Node Modules Cleaner — no folders watched".to_string();
+        return "Developer Cleaner — no folders watched".to_string();
     }
     format!(
-        "Node Modules Cleaner — {} removable worktree(s) in {} folder(s)",
+        "Developer Cleaner — {} removable worktree(s) in {} folder(s)",
         stats.removable_worktrees,
         stats.folders.len()
     )
@@ -275,7 +275,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, stats: &TrayStats) -> tauri::Resul
     menu.append(&MenuItem::with_id(
         app,
         "open",
-        "Open Node Modules Cleaner",
+        "Open Developer Cleaner",
         true,
         None::<&str>,
     )?)?;

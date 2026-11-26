@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+use crate::build_artifacts::{artifact_rejection, candidate_kind, BuildArtifact};
 use crate::fs_size::{measure_dir, scan_dir, DirSize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,6 +33,10 @@ pub struct NodeModulesFolder {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScanResult {
     pub folders: Vec<NodeModulesFolder>,
+    /// Build output and tool caches found by the same walk (Cargo `target`, `Pods`, `.next`, …).
+    /// Removed through `delete_build_artifacts`,
+    /// never `delete_folders`, and left out of the `total_*` figures, which stay node_modules-only.
+    pub build_artifacts: Vec<BuildArtifact>,
     pub total_size: u64,
     pub total_allocated_size: u64,
     pub total_reclaimable_size: u64,
@@ -333,14 +338,66 @@ fn is_skipped_dir(path: &Path) -> bool {
         return true;
     }
     // A Rust build directory is huge and never a JS project, but `target` is a common enough
-    // name that it is pruned only where Cargo put it.
+    // name that it is pruned only where Cargo put it. Those that pass the full check are
+    // offered as build artifacts before this rule is reached.
     name == "target"
         && path
             .parent()
-            .is_some_and(|parent| parent.join("Cargo.toml").exists())
+            .is_some_and(|parent| parent.join("Cargo.toml").is_file())
 }
 
+/// The project a build artifact belongs to. `app/ios/Pods` and `app/android/app/.cxx` belong to
+/// `app`, not to `ios` or `app`'s inner `app` module.
+fn get_artifact_project(path: &Path) -> String {
+    const PLATFORM_DIRS: &[&str] = &["ios", "android", "src-tauri", "macos"];
+    let names: Vec<&str> = path
+        .ancestors()
+        .skip(1)
+        .map_while(|ancestor| ancestor.file_name().and_then(|name| name.to_str()))
+        .collect();
+    names
+        .iter()
+        .enumerate()
+        .find(|&(index, name)| {
+            // `app` is skipped only as Android's module folder (`android/app`): a project can
+            // itself be called `app`.
+            let android_module = *name == "app" && names.get(index + 1) == Some(&"android");
+            !PLATFORM_DIRS.contains(name) && !android_module
+        })
+        .map_or("Unknown", |(_, name)| *name)
+        .to_string()
+}
+
+/// What one walk found: outermost `node_modules` and build-artifact directories.
+#[derive(Debug, Default, PartialEq)]
+struct FoundPaths {
+    node_modules: Vec<PathBuf>,
+    build_artifacts: Vec<PathBuf>,
+}
+
+impl FoundPaths {
+    /// Keep only the build-artifact candidates that pass the full check, which asks Git and is
+    /// therefore run once per candidate, in parallel, after the walk.
+    fn confirmed(mut self) -> Self {
+        self.build_artifacts = std::mem::take(&mut self.build_artifacts)
+            .into_par_iter()
+            .filter(|path| artifact_rejection(path).is_none())
+            .collect();
+        self
+    }
+
+    fn extend(&mut self, other: FoundPaths) {
+        self.node_modules.extend(other.node_modules);
+        self.build_artifacts.extend(other.build_artifacts);
+    }
+}
+
+#[cfg(test)]
 fn find_node_modules_paths(scan_path: &Path) -> Vec<PathBuf> {
+    find_cleanup_paths(scan_path).node_modules
+}
+
+fn find_cleanup_paths(scan_path: &Path) -> FoundPaths {
     if scan_path
         .file_name()
         .is_some_and(|name| name == "node_modules")
@@ -349,18 +406,28 @@ fn find_node_modules_paths(scan_path: &Path) -> Vec<PathBuf> {
         // `node_modules`, and `delete_folders` refuses one, so the root must not either.
         let is_real_dir =
             fs::symlink_metadata(scan_path).is_ok_and(|meta| meta.file_type().is_dir());
-        return if is_real_dir {
-            vec![scan_path.to_path_buf()]
-        } else {
-            Vec::new()
+        return FoundPaths {
+            node_modules: if is_real_dir {
+                vec![scan_path.to_path_buf()]
+            } else {
+                Vec::new()
+            },
+            ..FoundPaths::default()
         };
+    }
+    if candidate_kind(scan_path).is_some() {
+        return FoundPaths {
+            build_artifacts: vec![scan_path.to_path_buf()],
+            ..FoundPaths::default()
+        }
+        .confirmed();
     }
 
     // One walk per top-level folder, in parallel: a projects folder is many independent
     // trees, and a single walker spends most of its time waiting on one directory read at a
     // time.
     let Ok(children) = fs::read_dir(scan_path) else {
-        return Vec::new();
+        return FoundPaths::default();
     };
     let root_device = device_of(scan_path);
     let subtrees: Vec<PathBuf> = children
@@ -368,22 +435,27 @@ fn find_node_modules_paths(scan_path: &Path) -> Vec<PathBuf> {
         // `file_type` does not follow symlinks, so linked folders stay out as they always have.
         .filter(|child| child.file_type().is_ok_and(|kind| kind.is_dir()))
         .map(|child| child.path())
-        .filter(|path| !is_skipped_dir(path))
+        // A project picked as the root keeps its `target` or `Pods`, which the skip rules prune.
+        .filter(|path| candidate_kind(path).is_some() || !is_skipped_dir(path))
         // Staying on one filesystem keeps the scan out of mounted volumes and network shares,
         // which are slow to walk and not what the user asked to clean.
         .filter(|path| device_of(path) == root_device)
         .collect();
 
-    let mut paths: Vec<PathBuf> = subtrees
+    let mut found = subtrees
         .par_iter()
-        .flat_map_iter(|subtree| find_in_subtree(subtree))
-        .collect();
-    paths.sort();
-    paths
+        .map(|subtree| find_in_subtree(subtree))
+        .reduce(FoundPaths::default, |mut all, part| {
+            all.extend(part);
+            all
+        });
+    found.node_modules.sort();
+    found.build_artifacts.sort();
+    found.confirmed()
 }
 
-fn find_in_subtree(subtree: &Path) -> Vec<PathBuf> {
-    let mut paths = Vec::new();
+fn find_in_subtree(subtree: &Path) -> FoundPaths {
+    let mut found = FoundPaths::default();
     let mut entries = WalkDir::new(subtree).same_file_system(true).into_iter();
 
     while let Some(entry) = entries.next() {
@@ -397,6 +469,16 @@ fn find_in_subtree(subtree: &Path) -> Vec<PathBuf> {
             continue;
         }
 
+        // Checked ahead of the skip rules, which prune dot-directories, `Pods` and every
+        // `target` beside a `Cargo.toml`. Outermost only: nothing below a build directory is
+        // offered on its own. A candidate is still pruned when the full check later turns it
+        // down — what sits inside build output is never a project's own install.
+        if candidate_kind(entry.path()).is_some() {
+            found.build_artifacts.push(entry.path().to_path_buf());
+            entries.skip_current_dir();
+            continue;
+        }
+
         // The subtree's own top was already checked against the skip rules by the caller.
         if entry.depth() > 0 && is_skipped_dir(entry.path()) {
             entries.skip_current_dir();
@@ -404,12 +486,12 @@ fn find_in_subtree(subtree: &Path) -> Vec<PathBuf> {
         }
 
         if entry.file_name() == "node_modules" {
-            paths.push(entry.path().to_path_buf());
+            found.node_modules.push(entry.path().to_path_buf());
             entries.skip_current_dir();
         }
     }
 
-    paths
+    found
 }
 
 #[cfg(unix)]
@@ -449,7 +531,8 @@ fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
 
     // Keep only outermost node_modules directories. Their recursive size
     // already includes any dependency-level node_modules folders inside.
-    let node_modules_paths = find_node_modules_paths(scan_path);
+    let found = find_cleanup_paths(scan_path);
+    let node_modules_paths = found.node_modules;
 
     // Calculate sizes in parallel
     let folders: Vec<NodeModulesFolder> = node_modules_paths
@@ -472,12 +555,31 @@ fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
         })
         .collect();
 
+    let build_artifacts: Vec<BuildArtifact> = found
+        .build_artifacts
+        .par_iter()
+        .filter_map(|path| {
+            let kind = candidate_kind(path)?;
+            let scan = scan_dir(path);
+            Some(BuildArtifact {
+                path: path.to_string_lossy().to_string(),
+                kind,
+                size: scan.size.logical,
+                allocated_size: scan.size.allocated,
+                reclaimable_size: scan.size.reclaimable,
+                last_modified: scan.last_modified,
+                parent_project: get_artifact_project(path),
+            })
+        })
+        .collect();
+
     let total_size: u64 = folders.iter().map(|f| f.size).sum();
     let total_allocated_size: u64 = folders.iter().map(|f| f.allocated_size).sum();
     let total_reclaimable_size: u64 = folders.iter().map(|f| f.reclaimable_size).sum();
 
     Ok(ScanResult {
         folders,
+        build_artifacts,
         total_size,
         total_allocated_size,
         total_reclaimable_size,
@@ -568,7 +670,11 @@ pub(crate) fn remove_tree_collecting(root: &Path) -> Vec<FailedPath> {
 #[tauri::command]
 pub async fn delete_folders(paths: Vec<String>) -> Vec<DeleteResult> {
     let requested = paths.clone();
-    match tauri::async_runtime::spawn_blocking(move || delete_folders_blocking(paths)).await {
+    match tauri::async_runtime::spawn_blocking(move || {
+        delete_checked(paths, delete_target_rejection)
+    })
+    .await
+    {
         Ok(results) => results,
         // Nothing is known about how far the delete got, so every path is reported as
         // failed rather than silently dropped from the result.
@@ -606,7 +712,7 @@ fn delete_target_rejection(path: &Path) -> Option<String> {
     }
 }
 
-fn rejected(path: String, reason: String) -> DeleteResult {
+pub(crate) fn rejected(path: String, reason: String) -> DeleteResult {
     DeleteResult {
         success: false,
         removed_bytes: 0,
@@ -620,20 +726,42 @@ fn rejected(path: String, reason: String) -> DeleteResult {
     }
 }
 
-fn delete_folders_blocking(paths: Vec<String>) -> Vec<DeleteResult> {
+/// Delete each path that `rejection` lets through, measuring what was freed.
+///
+/// `rejection` is the per-kind guard — [`delete_target_rejection`] for `node_modules`,
+/// `artifact_rejection` for build folders — and runs immediately before the delete.
+pub(crate) fn delete_checked(
+    paths: Vec<String>,
+    rejection: fn(&Path) -> Option<String>,
+) -> Vec<DeleteResult> {
     paths
         .into_par_iter()
         .map(|path| {
             let path_ref = Path::new(&path);
 
             // Checked before measuring too: a rejected path must not even be walked.
-            if let Some(reason) = delete_target_rejection(path_ref) {
+            if let Some(reason) = rejection(path_ref) {
                 return rejected(path, reason);
             }
+
+            let checked = DirIdentity::of(path_ref);
 
             // Measure before deleting: afterwards there is nothing left to measure, and
             // reporting "freed 0 bytes" for a successful delete would be worse than useless.
             let before = measure_dir_size(path_ref);
+
+            // Measuring a large folder takes seconds; check again that the same folder is still
+            // there and still passes, so the delete runs on what was checked.
+            if DirIdentity::of(path_ref) != checked {
+                return rejected(
+                    path,
+                    "Refusing to delete: the folder was replaced while it was being measured"
+                        .to_string(),
+                );
+            }
+            if let Some(reason) = rejection(path_ref) {
+                return rejected(path, reason);
+            }
             let failures = remove_tree_collecting(path_ref);
             // A clean delete leaves nothing behind, so the second full walk is only paid for
             // when something survived and the freed figure has to subtract it.
@@ -660,6 +788,30 @@ fn delete_folders_blocking(paths: Vec<String>) -> Vec<DeleteResult> {
         .collect()
 }
 
+/// What tells one directory apart from another put at the same path: device and inode on Unix.
+/// Elsewhere only the re-run check guards the gap between measuring and deleting.
+#[derive(Debug, PartialEq, Eq)]
+struct DirIdentity(Option<(u64, u64)>);
+
+impl DirIdentity {
+    fn of(path: &Path) -> Self {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            Self(
+                fs::symlink_metadata(path)
+                    .ok()
+                    .map(|metadata| (metadata.dev(), metadata.ino())),
+            )
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            Self(None)
+        }
+    }
+}
+
 /// Single-quote a path for a shell command shown to the user.
 fn shell_quote(path: &str) -> String {
     format!("'{}'", path.replace('\'', r"'\''"))
@@ -682,7 +834,10 @@ pub async fn get_folder_size(path: String) -> Result<u64, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{delete_folders_blocking, find_node_modules_paths, remove_tree_collecting};
+    use super::{
+        delete_checked, delete_target_rejection, find_cleanup_paths, find_node_modules_paths,
+        remove_tree_collecting,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -706,6 +861,10 @@ mod tests {
         ));
         fs::create_dir_all(&root).expect("fixture root should be created");
         root
+    }
+
+    fn delete_folders_blocking(paths: Vec<String>) -> Vec<super::DeleteResult> {
+        delete_checked(paths, delete_target_rejection)
     }
 
     fn delete_one(path: &Path) -> super::DeleteResult {
@@ -805,6 +964,181 @@ mod tests {
         fs::create_dir_all(&js_target).expect("fixture should be created");
 
         assert_eq!(find_node_modules_paths(&root), vec![js_target]);
+    }
+
+    fn cargo_crate(dir: &Path) -> PathBuf {
+        let target = dir.join("target");
+        fs::create_dir_all(target.join("debug")).expect("fixture should be created");
+        fs::write(dir.join("Cargo.toml"), "[package]").expect("fixture write");
+        fs::write(
+            target.join("CACHEDIR.TAG"),
+            "Signature: 8a477f597d28d172789f06886806bc55\n",
+        )
+        .expect("fixture write");
+        target
+    }
+
+    #[test]
+    fn scan_offers_cargo_targets_alongside_node_modules() {
+        let root = temp_root("rust-targets");
+        let _cleanup = TestDirectory(root.clone());
+        let crate_target = cargo_crate(&root.join("tool"));
+        let tauri_target = cargo_crate(&root.join("app/src-tauri"));
+        let node_modules = root.join("app/node_modules");
+        fs::create_dir_all(&node_modules).expect("fixture should be created");
+        // Below a found target, nothing is offered on its own — not even a nested crate's.
+        cargo_crate(&crate_target.join("package/demo"));
+        // A `target` with no Cargo tag is not Cargo's (or predates the tag): never offered.
+        fs::create_dir_all(root.join("maven/target/classes")).expect("fixture should be created");
+        fs::write(root.join("maven/Cargo.toml"), "[package]").expect("fixture write");
+        // Nor is one inside node_modules, which belongs to an installed package.
+        cargo_crate(&node_modules.join("some-pkg"));
+
+        let found = find_cleanup_paths(&root);
+
+        assert_eq!(found.node_modules, vec![node_modules]);
+        assert_eq!(found.build_artifacts, vec![tauri_target, crate_target]);
+    }
+
+    /// `Pods` and the dot-directories are pruned by the skip rules, so the walk must meet them
+    /// as build artifacts first — and still never descend into them for `node_modules`.
+    #[test]
+    fn dir_identity_tells_folders_apart() {
+        let root = std::env::temp_dir().join(format!("dir-identity-{}", std::process::id()));
+        fs::create_dir_all(root.join("a")).unwrap();
+        fs::create_dir_all(root.join("b")).unwrap();
+        let a = super::DirIdentity::of(&root.join("a"));
+        assert_eq!(a, super::DirIdentity::of(&root.join("a")));
+        #[cfg(unix)]
+        {
+            assert_ne!(a, super::DirIdentity::of(&root.join("b")));
+            assert_ne!(a, super::DirIdentity::of(&root.join("missing")));
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn artifact_rows_name_the_project_even_when_it_is_called_app() {
+        let p = |s: &str| super::get_artifact_project(Path::new(s));
+        assert_eq!(p("/Users/dev/Projects/app/.next"), "app");
+        assert_eq!(p("/Users/dev/Projects/shop/android/app/.cxx"), "shop");
+        assert_eq!(p("/Users/dev/Projects/shop/ios/Pods"), "shop");
+        assert_eq!(p("/Users/dev/Projects/app/android/app/.cxx"), "app");
+        assert_eq!(p("/Users/dev/Projects/tool/src-tauri/target"), "tool");
+    }
+
+    #[test]
+    fn scan_offers_pods_and_hidden_build_folders() {
+        let root = temp_root("hidden-artifacts");
+        let _cleanup = TestDirectory(root.clone());
+        let write = |path: &str, content: &str| {
+            let path = root.join(path);
+            fs::create_dir_all(path.parent().expect("parent")).expect("fixture dir");
+            fs::write(path, content).expect("fixture write");
+        };
+        write("mobile/ios/Podfile", "platform :ios");
+        write("mobile/ios/Pods/Manifest.lock", "PODS:");
+        write(
+            "mobile/package.json",
+            r#"{"dependencies":{"expo":"~52.0.0"}}"#,
+        );
+        write("mobile/.expo/devices.json", "{}");
+        write("web/package.json", "{}");
+        write("web/.next/BUILD_ID", "abc");
+        write("web/.next/standalone/node_modules/x/index.js", "");
+        // No Podfile beside it: just a folder called Pods, pruned as before and not offered.
+        write("other/Pods/Manifest.lock", "PODS:");
+
+        let found = find_cleanup_paths(&root);
+
+        assert_eq!(
+            found.build_artifacts,
+            vec![
+                root.join("mobile/.expo"),
+                root.join("mobile/ios/Pods"),
+                root.join("web/.next"),
+            ],
+        );
+        assert!(found.node_modules.is_empty());
+        assert_eq!(
+            super::get_artifact_project(&root.join("mobile/ios/Pods")),
+            "mobile"
+        );
+    }
+
+    /// The root's own children go through the skip rules before any walk, and those prune every
+    /// `target` beside a `Cargo.toml`.
+    #[test]
+    fn scan_offers_the_target_of_a_crate_picked_as_the_root() {
+        let root = temp_root("crate-root");
+        let _cleanup = TestDirectory(root.clone());
+        let target = cargo_crate(&root);
+
+        assert_eq!(
+            find_cleanup_paths(&root).build_artifacts,
+            vec![target.clone()]
+        );
+        assert_eq!(find_cleanup_paths(&target).build_artifacts, vec![target]);
+    }
+
+    /// Dry run over a real folder through the same entry point the Scan button uses: lists
+    /// every build artifact it would offer and what deleting it frees, so false positives can be
+    /// read by eye before trusting the checks. Nothing is deleted.
+    /// `ARTIFACT_SCAN_PATH=~/Projects cargo test --release report_real_build_artifacts -- --ignored --nocapture`
+    #[test]
+    #[ignore = "reads the real filesystem"]
+    fn report_real_build_artifacts() {
+        let Ok(path) = std::env::var("ARTIFACT_SCAN_PATH") else {
+            return;
+        };
+        let started = std::time::Instant::now();
+        let result = super::scan_for_node_modules_blocking(path).expect("scan");
+        let mut artifacts = result.build_artifacts;
+        artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.reclaimable_size));
+        let mut per_kind: std::collections::BTreeMap<String, (usize, u64)> = Default::default();
+        for artifact in &artifacts {
+            let kind = format!("{:?}", artifact.kind);
+            let entry = per_kind.entry(kind.clone()).or_default();
+            entry.0 += 1;
+            entry.1 += artifact.reclaimable_size;
+            println!(
+                "BA {:>7.2} GB  {:<12} {:<20} {}",
+                artifact.reclaimable_size as f64 / 1e9,
+                kind,
+                artifact.parent_project,
+                artifact.path,
+            );
+        }
+        for (kind, (count, bytes)) in &per_kind {
+            println!(
+                "KIND {kind:<12} {count:>4} × {:>7.2} GB",
+                *bytes as f64 / 1e9
+            );
+        }
+        let total: u64 = artifacts
+            .iter()
+            .map(|artifact| artifact.reclaimable_size)
+            .sum();
+        println!(
+            "BA_TOTAL {} folders, {:.2} GB",
+            artifacts.len(),
+            total as f64 / 1e9
+        );
+        println!("SCAN_TIME {:.1}s", started.elapsed().as_secs_f64());
+    }
+
+    /// `delete_folders` keeps its node_modules-only guard: a Cargo target goes through
+    /// `delete_build_artifacts` or not at all.
+    #[test]
+    fn delete_folders_still_refuses_a_cargo_target() {
+        let root = temp_root("nm-guard");
+        let _cleanup = TestDirectory(root.clone());
+        let target = cargo_crate(&root.join("crate"));
+
+        let result = delete_one(&target);
+
+        assert!(!result.success);
+        assert!(target.join("CACHEDIR.TAG").exists());
     }
 
     #[test]

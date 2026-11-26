@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type {
   MergedWorktree,
-  NodeModulesFolder,
   WorktreeDeleteResult,
   WorktreeRemoval,
   WorktreeScanResult,
@@ -10,6 +9,7 @@ import type {
 import {
   adjustWorktreeSizes,
   applyWorktreeFailures,
+  type CleanupCandidate,
   describeFailures,
   isSelectableWorktree,
   worktreeFailures,
@@ -90,7 +90,7 @@ export function useMergedWorktrees() {
 
   const deleteSelected = useCallback(async (
     selectedWorktrees: MergedWorktree[],
-    deletedFolders: NodeModulesFolder[],
+    deletedFolders: CleanupCandidate[],
   ): Promise<WorktreeDeleteResult[]> => {
     if (isDeleting || isScanning) return [];
 

@@ -4,7 +4,7 @@
 
 ## Czym jest aplikacja
 
-**Node Modules Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po trzech rodzajach śmieci deweloperskich:
+**Developer Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po trzech rodzajach śmieci deweloperskich:
 
 1. folderach `node_modules` w projektach (`scan_for_node_modules`, `delete_folders` — `src-tauri/src/commands.rs`),
 2. zmergowanych Git worktree (`scan_for_merged_worktrees`, `delete_merged_worktrees` — `src-tauri/src/git_worktrees.rs`),
@@ -49,9 +49,9 @@ Brak. Interfejs aplikacji jest tylko po angielsku (napisy wprost w komponentach,
 
 ## CTA i identyfikatory
 
-- Remote: `https://github.com/jash90/node-modules-cleaner` → user `jash90`, repo `node-modules-cleaner`, repo publiczne.
+- Remote: `https://github.com/jash90/developer-cleaner` → user `jash90`, repo `developer-cleaner`, repo publiczne.
 - Brak `homepage`, brak CNAME, brak adresu produkcyjnego (to aplikacja desktopowa) → główne CTA: **GitHub Releases (latest)**, drugorzędne: repozytorium.
-- Adres strony: `https://jash90.github.io/node-modules-cleaner/` (PL), `.../en/` (EN).
+- Adres strony: `https://jash90.github.io/developer-cleaner/` (PL), `.../en/` (EN).
 - Licencja: MIT, © 2025 Bartłomiej Zimny (`LICENSE`). Kontakt: brak w repo poza GitHubem → link do Issues.
 
 ## Identyfikacja wizualna

@@ -2,7 +2,7 @@
 //
 //   npm run site:verify
 //
-// Serves site/ under /node-modules-cleaner/ (the Pages project path) and, for both
+// Serves site/ under /developer-cleaner/ (the Pages project path) and, for both
 // languages, checks: no console errors, every image decodes, every internal link and
 // anchor resolves, the language switch points at the other language, the two versions
 // have the same structure, nothing overflows at 390px, and the lightbox opens and closes.
@@ -17,7 +17,7 @@ import { chromium } from 'playwright';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const siteDir = join(root, 'site');
 const previewDir = join(root, 'node_modules', '.cache', 'site-preview');
-const BASE = '/node-modules-cleaner/';
+const BASE = '/developer-cleaner/';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',

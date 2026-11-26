@@ -3,6 +3,7 @@ import { useCleanup } from './hooks/useCleanup';
 import { useDevCaches } from './hooks/useDevCaches';
 import { FolderList } from './components/FolderList';
 import { WorktreeList } from './components/WorktreeList';
+import { BuildArtifactList } from './components/BuildArtifactList';
 import { CacheList } from './components/CacheList';
 import { SortControls } from './components/SortControls';
 import { SizeDisplay } from './components/SizeDisplay';
@@ -56,6 +57,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const {
     nodeModules,
+    buildArtifacts,
     mergedWorktrees,
     scanPath,
     isScanning,
@@ -121,9 +123,9 @@ function App() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between gap-6">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900">Node Modules Cleaner</h1>
+            <h1 className="text-xl font-bold text-gray-900">Developer Cleaner</h1>
             <p className="text-sm text-gray-500">
-              Find and remove node_modules and merged Git worktrees
+              Find and remove node_modules, build folders, merged Git worktrees and developer caches
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -208,7 +210,8 @@ function App() {
             <div className="whitespace-nowrap">
               <span className="text-gray-500">Found: </span>
               <span className="font-medium text-gray-900">
-                {nodeModules.folders.length} folders + {mergedWorktrees.worktrees.length} worktrees
+                {nodeModules.folders.length} folders + {buildArtifacts.targets.length} build folders
+                {' '}+ {mergedWorktrees.worktrees.length} worktrees
               </span>
               {/* The number the menu bar shows, so the two can be compared at a glance. */}
               <span className="text-gray-500"> ({removableWorktreeCount} removable)</span>
@@ -256,7 +259,7 @@ function App() {
                 <BranchIcon className="w-14 h-14 text-amber-300" />
               </div>
               <p className="text-lg font-medium text-gray-700 mb-1">No folder selected</p>
-              <p className="text-sm">Choose a folder to scan for node_modules and merged Git worktrees</p>
+              <p className="text-sm">Choose a folder to scan for node_modules, build folders and merged Git worktrees</p>
               <p className="text-sm mt-1">Developer caches below need no folder — scan them any time.</p>
             </div>
             {cacheSection}
@@ -284,6 +287,17 @@ function App() {
                 onToggleSelection={nodeModules.toggleSelection}
                 onSelectAll={nodeModules.selectAll}
                 onDeselectAll={nodeModules.deselectAll}
+                selectionDisabled={isDeleting || isScanning}
+              />
+            </section>
+
+            <section className="bg-white rounded-lg border border-orange-200 shadow-sm overflow-hidden">
+              <BuildArtifactList
+                artifacts={buildArtifacts.targets}
+                selectedPaths={buildArtifacts.selectedPaths}
+                onToggleSelection={buildArtifacts.toggleSelection}
+                onSetKindSelected={buildArtifacts.setKindSelected}
+                onDeselectAll={buildArtifacts.deselectAll}
                 selectionDisabled={isDeleting || isScanning}
               />
             </section>
@@ -370,13 +384,16 @@ function App() {
       <ConfirmDialog
         isOpen={showConfirmDialog}
         title="Remove selected items?"
-        description="node_modules folders are deleted permanently. Worktree files, including ignored files and untracked OS/watcher junk, are removed; Git branches are kept. Entries whose directory is already gone only have their leftover Git registration pruned. Developer caches are re-downloaded on demand; entries with an official prune command are handed to that tool, which keeps whatever is still referenced, and logs are emptied in place."
+        description="node_modules folders are deleted permanently. Build folders are deleted like their tool's own clean: the next build or install recreates them, and anything kept only there (release binaries, bundles) goes with them. Worktree files, including ignored files and untracked OS/watcher junk, are removed; Git branches are kept. Entries whose directory is already gone only have their leftover Git registration pruned. Developer caches are re-downloaded on demand; entries with an official prune command are handed to that tool, which keeps whatever is still referenced, and logs are emptied in place."
         items={summary.items}
         confirmLabel={needsConsent ? 'Remove and discard changes' : 'Remove'}
         selectedSize={summary.totalSize}
         sizeIsEstimate={summary.hasEstimate}
         warning={needsConsent ? {
           message: `${selectedWorktreesNeedingConsent.length} worktree(s) have uncommitted changes. Those changes will be lost — they are not in any commit:`,
+          acknowledgement: selectedWorktreesNeedingConsent.length === 1
+            ? 'I understand the uncommitted changes in this worktree will be permanently lost.'
+            : `I understand the uncommitted changes in these ${selectedWorktreesNeedingConsent.length} worktrees will be permanently lost.`,
           entries: selectedWorktreesNeedingConsent.map((worktree) => ({
             key: worktree.path,
             label: `${worktree.branch} · ${worktree.repository_name}`,

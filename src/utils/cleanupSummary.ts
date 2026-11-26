@@ -17,6 +17,8 @@ export interface CacheCandidate extends CleanupCandidate {
 export interface CleanupSummaryInput {
   nodeModules: CleanupCandidate[];
   worktrees: CleanupCandidate[];
+  /** Build output and tool caches. Like node_modules, those inside a selected worktree go with it. */
+  buildArtifacts?: CleanupCandidate[];
   caches?: CacheCandidate[];
 }
 
@@ -37,8 +39,10 @@ export function createCleanupSummary(
   input: CleanupSummaryInput,
 ): CleanupSummary {
   const caches = input.caches ?? [];
+  const buildArtifacts = input.buildArtifacts ?? [];
   const items = [
     { label: "node_modules folders", count: input.nodeModules.length },
+    { label: "build folders", count: buildArtifacts.length },
     { label: "merged Git worktrees", count: input.worktrees.length },
     { label: "developer caches", count: caches.length },
   ].filter((item) => item.count > 0);
@@ -47,7 +51,8 @@ export function createCleanupSummary(
     (total, worktree) => total + worktree.size,
     0,
   );
-  const standaloneNodeModulesSize = input.nodeModules
+  // A worktree's size already includes everything inside it.
+  const standaloneSize = (folders: CleanupCandidate[]) => folders
     .filter((folder) => !input.worktrees.some(
       (worktree) => isNestedPath(folder.path, worktree.path),
     ))
@@ -56,8 +61,10 @@ export function createCleanupSummary(
   const cacheSize = caches.reduce((total, cache) => total + cache.size, 0);
 
   return {
-    totalCount: input.nodeModules.length + input.worktrees.length + caches.length,
-    totalSize: worktreeSize + standaloneNodeModulesSize + cacheSize,
+    totalCount: input.nodeModules.length + buildArtifacts.length + input.worktrees.length
+      + caches.length,
+    totalSize: worktreeSize + standaloneSize(input.nodeModules) + standaloneSize(buildArtifacts)
+      + cacheSize,
     items,
     hasEstimate: caches.some((cache) => cache.isEstimate === true),
   };
@@ -305,6 +312,7 @@ export interface CategoryOutcome extends CategoryCounts {
 
 export interface UnifiedCleanupReport {
   nodeModules: CategoryOutcome;
+  buildArtifacts?: CategoryOutcome;
   worktrees: CategoryOutcome;
   caches: CategoryOutcome;
 }
@@ -318,9 +326,13 @@ function crashed(requested: number, reason: unknown): CategoryOutcome {
  * the other: a rejection is recorded against its own categories and the rest still report.
  */
 export async function runUnifiedCleanup(
-  runProjectCleanup: () => Promise<{ nodeModules: CategoryCounts; worktrees: CategoryCounts }>,
+  runProjectCleanup: () => Promise<{
+    nodeModules: CategoryCounts;
+    buildArtifacts?: CategoryCounts;
+    worktrees: CategoryCounts;
+  }>,
   runCacheCleanup: () => Promise<CategoryCounts>,
-  requested: { nodeModules: number; worktrees: number; caches: number },
+  requested: { nodeModules: number; buildArtifacts?: number; worktrees: number; caches: number },
 ): Promise<UnifiedCleanupReport> {
   const [projects, caches] = await Promise.allSettled([
     runProjectCleanup(),
@@ -331,6 +343,12 @@ export async function runUnifiedCleanup(
     nodeModules: projects.status === 'fulfilled'
       ? { ...projects.value.nodeModules, messages: [] }
       : crashed(requested.nodeModules, projects.reason),
+    buildArtifacts: projects.status === 'fulfilled'
+      ? { ...(projects.value.buildArtifacts ?? { removed: 0, failed: 0, freedBytes: 0 }), messages: [] }
+      // Optional, unlike the rest: nothing requested means no line about it in the report.
+      : (requested.buildArtifacts ?? 0) > 0
+        ? crashed(requested.buildArtifacts ?? 0, projects.reason)
+        : { removed: 0, failed: 0, freedBytes: 0, messages: [] },
     worktrees: projects.status === 'fulfilled'
       ? { ...projects.value.worktrees, messages: [] }
       : crashed(requested.worktrees, projects.reason),
@@ -347,6 +365,7 @@ export function formatCleanupReport(
 ): string[] {
   const categories: Array<[string, CategoryOutcome]> = [
     ['node_modules', report.nodeModules],
+    ['build folders', report.buildArtifacts ?? { removed: 0, failed: 0, freedBytes: 0, messages: [] }],
     ['worktrees', report.worktrees],
     ['developer caches', report.caches],
   ];

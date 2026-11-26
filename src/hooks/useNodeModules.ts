@@ -43,8 +43,9 @@ export function useNodeModules() {
     return sorted;
   }, [folders, sortConfig]);
 
-  const scan = useCallback(async (path: string) => {
-    if (isScanning || isDeleting) return;
+  /** Resolves to the full result, which also carries the build folders the same walk found. */
+  const scan = useCallback(async (path: string): Promise<ScanResult | null> => {
+    if (isScanning || isDeleting) return null;
 
     setIsScanning(true);
     setError(null);
@@ -55,8 +56,10 @@ export function useNodeModules() {
     try {
       const result = await invoke<ScanResult>('scan_for_node_modules', { path });
       setFolders(result.folders);
+      return result;
     } catch (err) {
       setError(`Scan failed: ${err}`);
+      return null;
     } finally {
       setIsScanning(false);
     }

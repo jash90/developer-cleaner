@@ -16,8 +16,31 @@ export interface NodeModulesFolder {
   top_packages: TopPackage[];
 }
 
+export type ArtifactKind =
+  | 'cargo_target'
+  | 'cocoapods'
+  | 'next_build'
+  | 'nx_cache'
+  | 'turbo_cache'
+  | 'android_cxx'
+  | 'coverage'
+  | 'expo_state';
+
+/** Build output or a tool cache inside a project. Removed with `delete_build_artifacts`. */
+export interface BuildArtifact {
+  path: string;
+  kind: ArtifactKind;
+  size: number;
+  allocated_size: number;
+  reclaimable_size: number;
+  last_modified: number | null;
+  /** The project it belongs to (`app` for `app/ios/Pods`). */
+  parent_project: string;
+}
+
 export interface ScanResult {
   folders: NodeModulesFolder[];
+  build_artifacts: BuildArtifact[];
   total_size: number;
   total_allocated_size: number;
   total_reclaimable_size: number;

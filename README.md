@@ -1,28 +1,28 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" alt="Node Modules Cleaner" width="128" height="128">
+  <img src="src-tauri/icons/128x128.png" alt="Developer Cleaner" width="128" height="128">
 </p>
 
-<h1 align="center">Node Modules Cleaner</h1>
+<h1 align="center">Developer Cleaner</h1>
 
 <p align="center">
-  <strong>Reclaim your disk space by removing unused node_modules folders</strong>
+  <strong>Reclaim disk space from node_modules, build folders, merged worktrees and developer caches</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jash90/node-modules-cleaner/releases/latest">
-    <img src="https://img.shields.io/github/v/release/jash90/node-modules-cleaner?style=flat-square" alt="Latest Release">
+  <a href="https://github.com/jash90/developer-cleaner/releases/latest">
+    <img src="https://img.shields.io/github/v/release/jash90/developer-cleaner?style=flat-square" alt="Latest Release">
   </a>
-  <a href="https://github.com/jash90/node-modules-cleaner/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/jash90/node-modules-cleaner?style=flat-square" alt="License">
+  <a href="https://github.com/jash90/developer-cleaner/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/jash90/developer-cleaner?style=flat-square" alt="License">
   </a>
-  <a href="https://github.com/jash90/node-modules-cleaner/releases">
-    <img src="https://img.shields.io/github/downloads/jash90/node-modules-cleaner/total?style=flat-square" alt="Downloads">
+  <a href="https://github.com/jash90/developer-cleaner/releases">
+    <img src="https://img.shields.io/github/downloads/jash90/developer-cleaner/total?style=flat-square" alt="Downloads">
   </a>
 </p>
 
 ---
 
-A fast, cross-platform desktop application that reclaims disk space from `node_modules` folders, merged Git worktrees, and the shared developer caches that quietly grow to tens of gigabytes.
+A fast, cross-platform desktop application that reclaims disk space from `node_modules` folders, build folders (Cargo `target`, CocoaPods `Pods`, `.next`, `.nx`, `.turbo`, Android `.cxx`, `coverage`, `.expo`), merged Git worktrees, and the shared developer caches that quietly grow to tens of gigabytes.
 
 ## Features
 
@@ -64,17 +64,17 @@ rather than deleted, so entries still referenced by your projects are kept.
   </tr>
   <tr>
     <td>🪟 Windows</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .msi</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .msi</a></td>
     <td>x64</td>
   </tr>
   <tr>
     <td>🍎 macOS</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .dmg</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .dmg</a></td>
     <td>Apple Silicon / Intel</td>
   </tr>
   <tr>
     <td>🐧 Linux</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .deb / .AppImage</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .deb / .AppImage</a></td>
     <td>x64</td>
   </tr>
 </table>
@@ -86,8 +86,8 @@ rather than deleted, so entries still referenced by your projects are kept.
 ## How It Works
 
 1. **Select a folder** — Choose a directory to scan (e.g., your Projects folder)
-2. **Wait for scan** — One scan finds both `node_modules` folders and merged Git worktrees
-3. **Review both panels** — `node_modules` results appear first, with merged worktrees in a separate panel below
+2. **Wait for scan** — One scan finds `node_modules` folders, build folders and merged Git worktrees
+3. **Review the panels** — `node_modules` results appear first, then build folders grouped by tool, then merged worktrees. A build folder is offered only when the tool that made it left its marks (a `target` needs `Cargo.toml` beside it and Cargo's `CACHEDIR.TAG` inside, `Pods` needs a `Podfile` and `Manifest.lock`, and so on) and Git tracks nothing inside it. Removing a worktree with uncommitted changes needs an extra, explicit confirmation
 4. **Remove selected** — Select items from either panel and confirm them together
 
 The **Developer caches** panel needs no folder — those caches live at fixed locations,
@@ -141,8 +141,8 @@ declares it, and if it is missing the app still starts, just without the tray.
 ### Build
 
 ```bash
-git clone https://github.com/jash90/node-modules-cleaner.git
-cd node-modules-cleaner
+git clone https://github.com/jash90/developer-cleaner.git
+cd developer-cleaner
 npm install
 npm run tauri build
 ```
