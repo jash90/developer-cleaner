@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jash90/node-modules-cleaner/releases/latest">
-    <img src="https://img.shields.io/github/v/release/jash90/node-modules-cleaner?style=flat-square" alt="Latest Release">
+  <a href="https://github.com/jash90/developer-cleaner/releases/latest">
+    <img src="https://img.shields.io/github/v/release/jash90/developer-cleaner?style=flat-square" alt="Latest Release">
   </a>
-  <a href="https://github.com/jash90/node-modules-cleaner/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/jash90/node-modules-cleaner?style=flat-square" alt="License">
+  <a href="https://github.com/jash90/developer-cleaner/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/jash90/developer-cleaner?style=flat-square" alt="License">
   </a>
-  <a href="https://github.com/jash90/node-modules-cleaner/releases">
-    <img src="https://img.shields.io/github/downloads/jash90/node-modules-cleaner/total?style=flat-square" alt="Downloads">
+  <a href="https://github.com/jash90/developer-cleaner/releases">
+    <img src="https://img.shields.io/github/downloads/jash90/developer-cleaner/total?style=flat-square" alt="Downloads">
   </a>
 </p>
 
@@ -64,17 +64,17 @@ rather than deleted, so entries still referenced by your projects are kept.
   </tr>
   <tr>
     <td>🪟 Windows</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .msi</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .msi</a></td>
     <td>x64</td>
   </tr>
   <tr>
     <td>🍎 macOS</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .dmg</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .dmg</a></td>
     <td>Apple Silicon / Intel</td>
   </tr>
   <tr>
     <td>🐧 Linux</td>
-    <td><a href="https://github.com/jash90/node-modules-cleaner/releases/latest">Download .deb / .AppImage</a></td>
+    <td><a href="https://github.com/jash90/developer-cleaner/releases/latest">Download .deb / .AppImage</a></td>
     <td>x64</td>
   </tr>
 </table>
@@ -141,8 +141,8 @@ declares it, and if it is missing the app still starts, just without the tray.
 ### Build
 
 ```bash
-git clone https://github.com/jash90/node-modules-cleaner.git
-cd node-modules-cleaner
+git clone https://github.com/jash90/developer-cleaner.git
+cd developer-cleaner
 npm install
 npm run tauri build
 ```
