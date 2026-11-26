@@ -289,7 +289,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     scanPath,
     windowCount,
     isBusy: isScanning || isDeleting,
-    scanFailed: mergedWorktrees.scanFailed,
+    // A stopped scan left the list empty on purpose; comparing it with the menu bar says nothing.
+    scanFailed: mergedWorktrees.scanFailed || mergedWorktrees.wasStopped,
   });
 
   const deleteSelected = useCallback(async () => {

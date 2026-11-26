@@ -909,6 +909,26 @@ mod tests {
         assert_eq!(finished.folders.len(), 1);
     }
 
+    #[test]
+    fn a_stop_partway_through_the_walk_returns_no_partial_result() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let root = TestDirectory(temp_root("stopped-midway"));
+        for project in ["one", "two", "three", "four"] {
+            fs::create_dir_all(root.0.join(project).join("node_modules/react")).expect("fixture");
+            fs::write(root.0.join(project).join("package.json"), "{}").expect("fixture");
+        }
+
+        // The first checks pass, so the walk has found something before the stop arrives.
+        let checks = AtomicUsize::new(0);
+        let stop = || checks.fetch_add(1, Ordering::SeqCst) >= 3;
+        let result =
+            super::scan_for_node_modules_until(root.0.to_string_lossy().to_string(), &stop);
+
+        assert_eq!(result.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
+        assert!(checks.load(Ordering::SeqCst) > 3);
+    }
+
     fn delete_folders_blocking(paths: Vec<String>) -> Vec<super::DeleteResult> {
         delete_checked(paths, delete_target_rejection)
     }

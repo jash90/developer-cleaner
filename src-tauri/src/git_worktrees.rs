@@ -964,7 +964,8 @@ fn looks_like_git_dir(candidate: PathBuf) -> Option<PathBuf> {
 
 /// `git fetch`, but it can never sit forever on a credential prompt and can never outlive the
 /// timeout. Both matter because the scan fetches every discovered repository.
-fn fetch_repository(repository: &Path) -> Result<(), String> {
+/// A stop kills the fetch instead of waiting out its timeout.
+fn fetch_repository(repository: &Path, stop: StopCheck) -> Result<(), String> {
     let mut child = git_command(repository)
         .args(["fetch", "--all", "--quiet", "--no-tags"])
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -1001,6 +1002,11 @@ fn fetch_repository(repository: &Path) -> Result<(), String> {
                 });
             }
             Ok(None) => {
+                if stop() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(SCAN_STOPPED.to_string());
+                }
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
@@ -1848,7 +1854,7 @@ fn scan_for_merged_worktrees_until(
             .par_iter()
             .filter(|(_, resolvable)| *resolvable && !stop())
             .filter_map(|(repository, _)| {
-                fetch_repository(repository).err().map(|error| {
+                fetch_repository(repository, stop).err().map(|error| {
                     format!(
                         "{}: could not fetch, results may be stale ({error})",
                         repository.display()
@@ -2450,6 +2456,13 @@ mod tests {
         assert_eq!(stopped.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
         let finished = scan_for_merged_worktrees_in(&scan_root).expect("scan");
         assert_eq!(finished.worktrees.len(), 1);
+
+        // A stop that arrives partway through, after some checks have already passed.
+        let checks = std::sync::atomic::AtomicUsize::new(0);
+        let stop_later = || checks.fetch_add(1, Ordering::SeqCst) >= 4;
+        let stopped_later = super::scan_for_merged_worktrees_until(&scan_root, &stop_later);
+        assert_eq!(stopped_later.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
+        assert!(checks.load(Ordering::SeqCst) > 4);
 
         drop(repo);
         let _ = fs::remove_dir_all(scan_root);
