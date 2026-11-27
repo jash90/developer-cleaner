@@ -124,7 +124,27 @@ jobs:
             Desktop application for reclaiming disk space from `node_modules` folders, build
             folders, merged Git worktrees, and shared developer caches.
 
-            ### Build folders, and a new name
+            ### A new overview-first window
+            - The overview shows how much space you can reclaim and a disk bar with free space
+              now and estimated free space after removal
+            - **Safest first** suggestions let you select low-risk items from a single category
+              in one click. Costly suggestions or those spanning several kinds open the
+              relevant list for review
+            - Four cards show the total and largest items for `node_modules`, build folders,
+              merged Git worktrees, and developer caches. Open a card's full list to pick
+              individual items. On the Build folders page, each tool has its own checkbox
+              and a note explaining what deleting that kind of folder costs
+            - One review panel gathers everything you selected across screens. If any selected
+              worktree has uncommitted changes, the acknowledgement stays pinned above the
+              buttons and you must tick it before you can remove anything
+            - Results appear by category as each scan finishes, with progress estimated from
+              the last scan of the same folder. **Stop** ends a running folder scan without
+              leaving a partial list. Developer caches are scanned at launch
+            - Sizes use a neutral colour, and red highlights uncommitted changes. Sorting
+              `node_modules` by size now uses the space deleting each folder actually frees
+            - The window can now shrink to 900 × 600
+
+            ### Build folders, and a new name (1.8.0)
             - **Node Modules Cleaner is now Developer Cleaner.** Settings carry over. On macOS the
               new version installs as `Developer Cleaner.app`, so the old `Node Modules Cleaner.app`
               can be deleted; on Linux the package is now `developer-cleaner`, so remove the old
