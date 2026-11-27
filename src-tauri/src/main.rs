@@ -4,15 +4,19 @@
 mod build_artifacts;
 mod commands;
 mod dev_caches;
+mod disk_space;
 mod fs_size;
 mod git_worktrees;
+mod scan_cancel;
 mod settings;
 mod tray;
 
+use build_artifacts::delete_build_artifacts;
 use commands::{delete_folders, get_folder_size, scan_for_node_modules};
 use dev_caches::{clean_dev_caches, scan_for_dev_caches};
+use disk_space::get_disk_space;
 use git_worktrees::{delete_merged_worktrees, scan_for_merged_worktrees};
-use build_artifacts::delete_build_artifacts;
+use scan_cancel::cancel_scan;
 use settings::{
     add_watched_folder, dock_toggle_available, get_settings, remove_watched_folder, set_hide_dock,
     SettingsStore,
@@ -55,6 +59,8 @@ fn main() {
             get_folder_size,
             scan_for_dev_caches,
             clean_dev_caches,
+            get_disk_space,
+            cancel_scan,
             get_settings,
             set_hide_dock,
             dock_toggle_available,

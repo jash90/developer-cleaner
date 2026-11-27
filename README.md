@@ -85,15 +85,15 @@ rather than deleted, so entries still referenced by your projects are kept.
 
 ## How It Works
 
-1. **Select a folder** — Choose a directory to scan (e.g., your Projects folder)
-2. **Wait for scan** — One scan finds `node_modules` folders, build folders and merged Git worktrees
-3. **Review the panels** — `node_modules` results appear first, then build folders grouped by tool, then merged worktrees. A build folder is offered only when the tool that made it left its marks (a `target` needs `Cargo.toml` beside it and Cargo's `CACHEDIR.TAG` inside, `Pods` needs a `Podfile` and `Manifest.lock`, and so on) and Git tracks nothing inside it. Removing a worktree with uncommitted changes needs an extra, explicit confirmation
-4. **Remove selected** — Select items from either panel and confirm them together
+1. **Select a folder** — Choose a directory to scan (e.g., your Projects folder). Developer caches are scanned at launch and need no folder.
+2. **Watch the overview fill in** — One scan finds `node_modules` folders, build folders and merged Git worktrees. Each category card fills in as soon as its own scan returns, the total grows as "found so far", progress is shown against the last scan's duration, and **Stop** ends a scan without leaving a partial list.
+3. **Start from the overview** — A disk bar shows each category's share and the free space before and after removal. A "safest first" suggestions list offers one-click selection only for low-risk single-category picks (such as clean merged worktrees); anything costly or spanning several kinds only opens the matching list for review. Four cards show each category's total and largest items.
+4. **Drill down** — "Review all" opens a category's full list. Build folders are grouped by tool, each kind with its own checkbox and a note on what deleting it costs; nothing selects across kinds. A build folder is offered only when the tool that made it left its marks (a `target` needs `Cargo.toml` beside it and Cargo's `CACHEDIR.TAG` inside, `Pods` needs a `Podfile` and `Manifest.lock`, and so on) and Git tracks nothing inside it.
+5. **Review and remove** — The review panel collects what you picked on every screen, repeats each selected kind's cost note, and removes everything in one go. Worktrees with uncommitted changes are listed by name, and **Remove** stays disabled until you tick that their changes will be permanently lost.
 
-The **Developer caches** panel needs no folder — those caches live at fixed locations,
-so you can scan and clean them straight away. Targets are grouped by kind and each one
-states how it will be cleaned: deleted, emptied in place, or handed to the owning tool's
-prune command.
+Developer caches live at fixed locations, so they need no folder. Targets are grouped by
+kind and each one states how it will be cleaned: deleted, emptied in place, or handed to
+the owning tool's prune command.
 
 For linked Git worktrees, the app refreshes each repository's remote-tracking refs and then compares every worktree against all of the repository's base branches — `origin/HEAD` plus `origin/main`, `origin/master`, `origin/development` and `origin/develop`, falling back to local branches only when a repository has no remote base at all. Comparing against `origin/HEAD` alone would report every branch merged into a second integration branch as still open.
 
@@ -101,7 +101,7 @@ Beyond a plain ancestry check, a branch also counts as merged when its content i
 
 Worktrees with a detached HEAD are included; a worktree that holds a base branch itself never is. Registrations whose directory is already gone are reported as stale and cleared with `git worktree prune` rather than being mislabelled as having uncommitted changes.
 
-Worktrees with uncommitted changes can be selected, but the confirmation dialog names every one of them and removes them only once you accept losing those changes. That consent covers only what the dialog listed: a worktree that was clean at scan time and has changes by the time you click Remove is still refused. Removal is always refused when Git has locked the worktree, or when the worktree gained a commit after the scan — accepting the loss of uncommitted files is not accepting the loss of a commit. A worktree that something else removed after the scan (another tool, another session) counts as removed rather than as a failure, and leaves the list. Untracked OS and watcher noise (`.DS_Store`, `.watchman-cookie-*`) is reported separately from real changes: it is what makes `git worktree remove` refuse, so removal retries once with a single `-f` after re-reading the worktree — never two, which is what would be needed to bypass a lock. Git branches are kept.
+Worktrees with uncommitted changes can be selected, but the review panel names every one of them and removes them only once you accept losing those changes. That consent covers only what the panel listed: a worktree that was clean at scan time and has changes by the time you click Remove is still refused. Removal is always refused when Git has locked the worktree, or when the worktree gained a commit after the scan — accepting the loss of uncommitted files is not accepting the loss of a commit. A worktree that something else removed after the scan (another tool, another session) counts as removed rather than as a failure, and leaves the list. Untracked OS and watcher noise (`.DS_Store`, `.watchman-cookie-*`) is reported separately from real changes: it is what makes `git worktree remove` refuse, so removal retries once with a single `-f` after re-reading the worktree — never two, which is what would be needed to bypass a lock. Git branches are kept.
 
 ### Menu bar mode
 

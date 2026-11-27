@@ -14,6 +14,7 @@ import {
   isSelectableWorktree,
   worktreeFailures,
 } from '../utils/cleanupSummary';
+import { isScanStopped } from '../utils/scanStop';
 
 export function useMergedWorktrees() {
   const [worktrees, setWorktrees] = useState<MergedWorktree[]>([]);
@@ -23,6 +24,7 @@ export function useMergedWorktrees() {
   const [scanPath, setScanPath] = useState<string | null>(null);
   const [totalSize, setTotalSize] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [wasStopped, setWasStopped] = useState(false);
   // Distinct from `error`, which also carries per-repository warnings from a scan that worked.
   const [scanFailed, setScanFailed] = useState(false);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -36,6 +38,7 @@ export function useMergedWorktrees() {
     setIsScanning(true);
     setError(null);
     setScanFailed(false);
+    setWasStopped(false);
     setWorktrees([]);
     setSelectedPaths(new Set());
     setTotalSize(0);
@@ -54,8 +57,12 @@ export function useMergedWorktrees() {
         setError(`${result.warnings.length} repository warning(s). ${result.warnings[0]}`);
       }
     } catch (err) {
-      setError(`Worktree scan failed: ${err}`);
-      setScanFailed(true);
+      if (isScanStopped(err)) {
+        setWasStopped(true);
+      } else {
+        setError(`Worktree scan failed: ${err}`);
+        setScanFailed(true);
+      }
     } finally {
       setIsScanning(false);
     }
@@ -87,6 +94,24 @@ export function useMergedWorktrees() {
   const deselectAll = useCallback(() => {
     setSelectedPaths(new Set());
   }, []);
+
+  /**
+   * Tick or untick the given rows (e.g. the ones a filter shows). Locked and blocked rows are
+   * never ticked, as with `selectAll`.
+   */
+  const setPathsSelected = useCallback((paths: string[], selected: boolean) => {
+    const allowed = new Set(worktrees
+      .filter((worktree) => isSelectableWorktree(worktree) && !blockedReasons.has(worktree.path))
+      .map((worktree) => worktree.path));
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      paths.forEach((path) => {
+        if (!selected) next.delete(path);
+        else if (allowed.has(path)) next.add(path);
+      });
+      return next;
+    });
+  }, [blockedReasons, worktrees]);
 
   const deleteSelected = useCallback(async (
     selectedWorktrees: MergedWorktree[],
@@ -158,6 +183,7 @@ export function useMergedWorktrees() {
     worktrees,
     selectedPaths,
     isScanning,
+    wasStopped,
     isDeleting,
     scanPath,
     totalSize,
@@ -170,6 +196,7 @@ export function useMergedWorktrees() {
     toggleSelection,
     selectAll,
     deselectAll,
+    setPathsSelected,
     deleteSelected,
     clearError: () => setError(null),
   };

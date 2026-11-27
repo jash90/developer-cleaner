@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Developer Cleaner: odzyskaj miejsce po node_modules, worktree i cache</title>
-  <meta name="description" content="Darmowa aplikacja na Windows, macOS i Linux, która znajduje i usuwa foldery node_modules, zmergowane Git worktree oraz cache npm, pnpm, bun, yarn, uv i Gradle. Pokazuje, ile miejsca naprawdę odzyskasz.">
+  <title>Developer Cleaner: odzyskaj miejsce po node_modules, folderach buildów, worktree i cache</title>
+  <meta name="description" content="Darmowa aplikacja na Windows, macOS i Linux, która znajduje i usuwa foldery node_modules, foldery buildów (Cargo target, Pods, .next, .turbo i inne), zmergowane Git worktree oraz cache npm, pnpm, bun, yarn, uv i Gradle. Pokazuje, ile miejsca naprawdę odzyskasz.">
   <meta name="theme-color" content="#2563eb">
   <link rel="canonical" href="https://jash90.github.io/developer-cleaner/">
   <link rel="alternate" hreflang="pl" href="https://jash90.github.io/developer-cleaner/">
@@ -17,17 +17,37 @@
   <meta property="og:site_name" content="Developer Cleaner">
   <meta property="og:locale" content="pl_PL">
   <meta property="og:locale:alternate" content="en_US">
-  <meta property="og:title" content="Developer Cleaner: odzyskaj miejsce po node_modules, worktree i cache">
-  <meta property="og:description" content="Znajduje i usuwa node_modules, zmergowane Git worktree i cache narzędzi deweloperskich. Pokazuje, ile miejsca naprawdę wróci na dysk.">
+  <meta property="og:title" content="Developer Cleaner: odzyskaj miejsce po node_modules, folderach buildów, worktree i cache">
+  <meta property="og:description" content="Znajduje i usuwa node_modules, foldery buildów, zmergowane Git worktree i cache narzędzi deweloperskich. Pokazuje, ile miejsca naprawdę wróci na dysk.">
   <meta property="og:url" content="https://jash90.github.io/developer-cleaner/">
   <meta property="og:image" content="https://jash90.github.io/developer-cleaner/assets/og-image.png">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Ikona Developer Cleaner obok okna z listą folderów node_modules i ich rozmiarami">
+  <meta property="og:image:alt" content="Ikona i nazwa Developer Cleaner z hasłem „Odzyskaj miejsce po node_modules, folderach buildów, worktree i cache” obok przeglądu aplikacji: suma miejsca do odzyskania, pasek dysku, sugestie i cztery karty kategorii">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Developer Cleaner">
-  <meta name="twitter:description" content="Znajduje i usuwa node_modules, zmergowane Git worktree i cache narzędzi deweloperskich.">
+  <meta name="twitter:description" content="Znajduje i usuwa node_modules, foldery buildów, zmergowane Git worktree i cache narzędzi deweloperskich.">
   <meta name="twitter:image" content="https://jash90.github.io/developer-cleaner/assets/og-image.png">
+  <meta name="twitter:image:alt" content="Ikona i nazwa Developer Cleaner obok przeglądu aplikacji z sumą miejsca do odzyskania i czterema kartami kategorii">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Developer Cleaner",
+    "description": "Darmowa aplikacja desktopowa, która znajduje i usuwa foldery node_modules, foldery buildów, zmergowane Git worktree i cache narzędzi deweloperskich.",
+    "url": "https://jash90.github.io/developer-cleaner/",
+    "inLanguage": "pl",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "downloadUrl": "https://github.com/jash90/developer-cleaner/releases/latest",
+    "sameAs": "https://github.com/jash90/developer-cleaner",
+    "license": "https://github.com/jash90/developer-cleaner/blob/master/LICENSE",
+    "image": "https://jash90.github.io/developer-cleaner/assets/og-image.png",
+    "author": { "@type": "Person", "name": "Bartłomiej Zimny" },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
 
   <link rel="stylesheet" href="./assets/site.css">
   <script src="./assets/site.js" defer></script>
@@ -59,10 +79,11 @@
       <div class="container">
         <img class="hero-icon" src="./assets/icon-256.png" alt="Ikona aplikacji Developer Cleaner" width="88" height="88">
         <p class="eyebrow">Darmowa aplikacja desktopowa · Windows, macOS, Linux</p>
-        <h1 id="hero-title">Odzyskaj gigabajty zajęte przez node_modules</h1>
+        <h1 id="hero-title">Odzyskaj gigabajty zajęte przez node_modules i buildy</h1>
         <p class="lead">
           Developer Cleaner w jednym skanie znajduje foldery <code>node_modules</code>,
-          zmergowane Git worktree i współdzielone cache narzędzi deweloperskich.
+          foldery buildów, takie jak <code>target</code> z Cargo, <code>Pods</code> czy <code>.next</code>,
+          i zmergowane Git worktree, a osobno współdzielone cache narzędzi deweloperskich.
           Pokazuje, ile miejsca naprawdę wróci na dysk, a nie tylko ile zajmują pliki na papierze.
         </p>
         <div class="hero-actions">
@@ -80,7 +101,7 @@
         <div class="window">
           <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
           <img src="./assets/screenshots/overview-desktop.webp" width="1440" height="900" fetchpriority="high"
-               alt="Główne okno aplikacji po skanie folderu Projects: dziewięć folderów node_modules z oznaczeniem menedżera pakietów (npm, yarn, pnpm, bun), wykrytymi technologiami i rozmiarem do odzyskania; cztery zaznaczone, na dole 6,8 GB do zwolnienia.">
+               alt="Przegląd po skanie folderu Projects: co najmniej 38,4 GB do odzyskania, pasek dysku z udziałem każdej kategorii i wolnym miejscem teraz (41,6 GB) i po usunięciu (80,0 GB), kolumna sugestii od najbezpieczniejszych i cztery karty: Build folders, Developer caches, Merged worktrees i node_modules, każda z największymi pozycjami. Na dole 21 zaznaczonych pozycji i co najmniej 23,0 GB do zwolnienia.">
         </div>
       </div>
     </section>
@@ -90,10 +111,10 @@
         <div class="section-head">
           <h2 id="problem-title">Dysk zapełnia się sam, po cichu</h2>
           <p>
-            Każdy projekt JavaScript ma własne <code>node_modules</code>, każda gałąź otwarta przez
-            <code>git worktree</code> to kolejna pełna kopia repozytorium, a menedżery pakietów trzymają
-            swoje cache poza projektami. Po kilku miesiącach robią się z tego dziesiątki gigabajtów,
-            których nikt nie pilnuje.
+            Każdy projekt JavaScript ma własne <code>node_modules</code>, każdy build zostawia po sobie
+            folder z wynikami, każda gałąź otwarta przez <code>git worktree</code> to kolejna pełna kopia
+            repozytorium, a menedżery pakietów trzymają swoje cache poza projektami. Po kilku miesiącach
+            robią się z tego dziesiątki gigabajtów, których nikt nie pilnuje.
           </p>
         </div>
 
@@ -101,6 +122,10 @@
           <div class="stat">
             <h3><span class="dot dot-blue" aria-hidden="true"></span>node_modules</h3>
             <p>Zostają w projektach, których nie otwierałeś od miesięcy. Gdy wrócisz do projektu, <code>npm install</code> je odtworzy.</p>
+          </div>
+          <div class="stat">
+            <h3><span class="dot dot-orange" aria-hidden="true"></span>Foldery buildów</h3>
+            <p><code>target</code> z Cargo, <code>Pods</code>, <code>.next</code>, <code>.nx</code>, <code>.turbo</code>, <code>.cxx</code>, <code>coverage</code>, <code>.expo</code>. Następny build albo instalacja je odtworzy.</p>
           </div>
           <div class="stat">
             <h3><span class="dot dot-amber" aria-hidden="true"></span>Zmergowane worktree</h3>
@@ -148,24 +173,67 @@
       <div class="container">
         <div class="section-head">
           <h2 id="features-title">Co potrafi</h2>
-          <p>Jedno okno, trzy panele i jedno potwierdzenie przed usunięciem czegokolwiek.</p>
+          <p>Najpierw przegląd, potem osobna strona dla każdej kategorii i jeden panel przeglądu, zanim cokolwiek zostanie usunięte.</p>
         </div>
 
         <article class="feature">
+          <div class="feature-text">
+            <span class="feature-tag tag-gray">Przegląd</span>
+            <h3>Najpierw przegląd, potem szczegóły</h3>
+            <p>
+              Po skanie widzisz od razu, ile miejsca możesz odzyskać i skąd ono pochodzi, a nie długą listę
+              folderów do przewijania.
+            </p>
+            <ul>
+              <li>Suma do odzyskania i pasek dysku: udział każdej kategorii, wolne miejsce teraz i po usunięciu wszystkiego, co znaleziono.</li>
+              <li>Cztery karty z sumą i największymi pozycjami każdej kategorii. <strong>Review all ›</strong> otwiera pełną listę.</li>
+              <li>Sugestie od najbezpieczniejszych. Jednym kliknięciem zaznaczają tylko pozycje o niskim ryzyku z jednej kategorii, na przykład porzucone store'y albo czyste, niezablokowane worktree. Pozostałe otwierają przefiltrowaną listę do przejrzenia.</li>
+              <li>Karty wypełniają się, gdy wraca każdy skan. Postęp jest liczony względem poprzedniego skanu tego samego folderu, a <strong>Stop</strong> przerywa skan bez pokazywania niepełnych wyników.</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="./assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="Przegląd: suma do odzyskania, pasek dysku z wolnym miejscem przed i po usunięciu, kolumna sugestii i cztery karty kategorii z największymi pozycjami.">
+          </figure>
+        </article>
+
+        <article class="feature reverse">
           <div class="feature-text">
             <span class="feature-tag tag-blue">node_modules</span>
             <h3>Szybki skan i uczciwe rozmiary</h3>
             <p>Wskaż folder, na przykład <code>~/Projects</code>, a Rust przeskanuje go równolegle (Rayon).</p>
             <ul>
-              <li>Każdy wiersz pokazuje, ile miejsca faktycznie wróci. Gdy rozmiar nominalny jest inny, widzisz go obok.</li>
+              <li>Każdy wiersz pokazuje, ile miejsca faktycznie wróci. Gdy rozmiar nominalny jest inny, widać go po najechaniu na rozmiar, razem z wyjaśnieniem, skąd ta różnica.</li>
               <li>Menedżer pakietów rozpoznany po lockfile: npm, yarn, pnpm albo bun.</li>
               <li>Technologie z <code>package.json</code> jako etykiety: next, react, expo, @nestjs, vue, astro i inne.</li>
               <li>Sortowanie po nazwie, rozmiarze albo menedżerze; zaznaczanie pojedynczo lub wszystkich naraz.</li>
             </ul>
           </div>
           <figure class="shot">
-            <img src="./assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="Panel node_modules posortowany po rozmiarze. Projekty z pnpm i bun pokazują mały rozmiar do odzyskania i większy rozmiar nominalny obok.">
+            <img src="./assets/screenshots/node-modules-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="Strona node_modules posortowana po rozmiarze, z kolumnami projektu, lokalizacji, menedżera pakietów, wykrytych technologii, daty zmiany i rozmiaru; cztery foldery zaznaczone.">
+          </figure>
+        </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="feature-tag tag-orange">Foldery buildów</span>
+            <h3>Foldery buildów, tylko tam, gdzie zostawiło je narzędzie</h3>
+            <p>
+              Ten sam skan znajduje w projektach wyniki buildów i cache narzędzi: <code>target</code> z Cargo,
+              <code>Pods</code> z CocoaPods, <code>.next</code>, <code>.nx</code>, <code>.turbo</code>,
+              androidowe <code>.cxx</code>, <code>coverage</code> i <code>.expo</code>.
+            </p>
+            <ul>
+              <li>Folder trafia na listę tylko wtedy, gdy narzędzie, które go utworzyło, zostawiło ślady obok i w środku: <code>target</code> wymaga <code>Cargo.toml</code> obok i <code>CACHEDIR.TAG</code> w środku, <code>Pods</code> pliku <code>Podfile</code> i <code>Manifest.lock</code>, a <code>coverage</code> prawdziwego raportu pokrycia.</li>
+              <li>Nigdy, gdy Git śledzi cokolwiek w środku, więc zacommitowane <code>Pods</code> i foldery o tylko podobnej nazwie zostają nietknięte. To samo sprawdzenie powtarza się tuż przed usunięciem.</li>
+              <li>Każde narzędzie ma własną grupę i własne pole wyboru, a w nagłówku grupy notę „What you lose”, czyli ile kosztuje usunięcie: <code>target</code> z Rusta to pełna rekompilacja i utrata trzymanych tam binarek release'owych.</li>
+              <li>Nic nie zaznacza folderów kilku narzędzi naraz: ani zaznaczenie wszystkich <code>node_modules</code>, ani sugestie, które dla folderów buildów otwierają tylko przefiltrowaną listę.</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="./assets/screenshots/builds-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="Strona Build folders pogrupowana według narzędzi: Rust (Cargo), CocoaPods, Next.js, Nx, Turborepo, Android native (CMake), Test coverage i Expo. Każda grupa ma własne pole wyboru i notę „What you lose”; zaznaczone są grupy Next.js, Turborepo i Test coverage.">
           </figure>
         </article>
 
@@ -180,14 +248,15 @@
             </p>
             <ul>
               <li>Rozpoznaje squash merge, domyślny tryb scalania na GitHubie, i nie zostawia przy tym obiektów w repozytorium.</li>
-              <li>Worktree z niezacommitowanymi zmianami albo zablokowane przez Git są chronione, nie da się ich zaznaczyć.</li>
+              <li>Worktree z niezacommitowanymi zmianami można zaznaczyć, ale usuniesz je dopiero po wyraźnej zgodzie na utratę tych zmian. Worktree zablokowanych przez Git nie da się zaznaczyć.</li>
               <li>Wpisy, których katalog już zniknął, są czyszczone przez <code>git worktree prune</code>.</li>
+              <li>Filtry: czyste, z niezacommitowanymi zmianami, zablokowane i takie, po których została tylko rejestracja w Git.</li>
               <li>Gałęzie zostają. Usuwany jest tylko katalog roboczy.</li>
             </ul>
           </div>
           <figure class="shot">
             <img src="./assets/screenshots/worktrees-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="Panel Merged Git worktrees: gałęzie zmergowane i squash-zmergowane do origin/main, origin/development i origin/develop; worktree z niezacommitowanymi zmianami i zablokowane są wyszarzone; na dole lista porównanych gałęzi bazowych.">
+                 alt="Strona Merged worktrees z filtrami All, Clean, Uncommitted, Locked i Registration only: gałęzie zmergowane i squash-zmergowane do origin/main, origin/development i origin/develop. Worktree z niezacommitowanymi zmianami ma czerwone oznaczenie, zablokowane jest wyszarzone, a wpis bez katalogu tylko czyści rejestrację w Git; pod listą rozwinięte gałęzie bazowe, z którymi porównano repozytoria.">
           </figure>
         </article>
 
@@ -195,7 +264,7 @@
           <div class="feature-text">
             <span class="feature-tag tag-sky">Cache deweloperskie</span>
             <h3>Cache poza projektami, bez wybierania folderu</h3>
-            <p>Te cache leżą w stałych miejscach, więc możesz je przeskanować od razu po uruchomieniu aplikacji.</p>
+            <p>Te cache leżą w stałych miejscach, więc aplikacja skanuje je od razu po uruchomieniu, zanim wybierzesz folder.</p>
             <ul>
               <li>npm (<code>_cacache</code>, <code>_npx</code>), bun, yarn Berry i Classic, stare wersje Gradle, stare buildy puppeteer, stare wersje Node z nvm.</li>
               <li>Porzucone store'y pnpm, które zostały po zmianie domyślnej lokalizacji, odróżnione od store'u, którego pnpm używa teraz.</li>
@@ -206,27 +275,33 @@
           </div>
           <figure class="shot">
             <img src="./assets/screenshots/caches-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="Panel Developer caches pogrupowany na porzucone store'y i cache menedżerów pakietów. Przy każdej pozycji widać metodę czyszczenia (delete, pnpm store prune, uv cache prune), czas od ostatniego użycia i rozmiar.">
+                 alt="Strona Developer caches pogrupowana na porzucone store'y, cache menedżerów pakietów, starsze wersje środowisk i nierotowane logi. Przy każdej pozycji widać metodę czyszczenia (delete, pnpm store prune, uv cache prune, empty in place), czas od ostatniego użycia, rozmiar i notatkę; po kliknięciu Select safe zaznaczone jest wszystko poza wersją Node oznaczoną „read the note”.">
           </figure>
         </article>
 
         <article class="feature reverse">
           <div class="feature-text">
             <span class="feature-tag tag-gray">Bezpieczeństwo</span>
-            <h3>Jedno potwierdzenie z podsumowaniem</h3>
+            <h3>Jeden przegląd przed usunięciem</h3>
             <p>
-              Zaznaczone <code>node_modules</code> i worktree usuwasz razem, po jednym potwierdzeniu,
-              które pokazuje, ile czego usuwasz i ile miejsca zwolnisz.
+              Wszystko, co zaznaczysz na dowolnym ekranie, czyli <code>node_modules</code>, foldery buildów,
+              worktree i cache, trafia do jednego panelu <strong>Review and Remove…</strong>. Pokazuje on każdą
+              kategorię z liczbą pozycji i miejscem do zwolnienia, a każdą pozycję możesz tam jeszcze odznaczyć.
             </p>
             <ul>
+              <li>Dla folderów buildów panel powtarza, co tracisz przy każdym zaznaczonym narzędziu, a dla cache ich notatki.</li>
+              <li>Worktree z niezacommitowanymi zmianami panel wymienia z nazwy w ramce przypiętej nad przyciskami. <strong>Remove and discard changes</strong> pozostaje nieaktywny, dopóki nie zaznaczysz, że te zmiany przepadną na zawsze, a domyślnym przyciskiem jest <strong>Keep Everything</strong>.</li>
+              <li>Gdy zmieni się lista takich worktree, na przykład po odznaczeniu jednego z nich, zgodę trzeba dać od nowa.</li>
+              <li>Ta zgoda obejmuje tylko wymienione worktree. Jeśli worktree czyste w chwili skanu ma zmiany, gdy klikasz Remove, usunięcie zostanie odrzucone.</li>
               <li>Usunięcie zostanie odrzucone, jeśli od skanu w worktree pojawił się nowy commit.</li>
               <li>Śmieci systemowe (<code>.DS_Store</code>, cookies watchmana) są raportowane osobno, bo nie są pracą, choć blokują <code>git worktree remove</code>.</li>
               <li>Worktree zablokowanego przez Git aplikacja nigdy nie usunie na siłę.</li>
+              <li>Błąd w jednej kategorii nie zatrzymuje pozostałych. Wynik podaje dla każdej, ile usunięto, ile się nie udało i ile miejsca zwolniono.</li>
             </ul>
           </div>
           <figure class="shot">
-            <img src="./assets/screenshots/confirm-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                 alt="Okno potwierdzenia „Remove selected items?”: 4 foldery node_modules, 5 zmergowanych worktree, 6,8 GB do zwolnienia, przyciski Cancel i Remove.">
+            <img src="./assets/screenshots/review-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="Panel przeglądu „Review 22 items”: 4 foldery node_modules, 4 foldery buildów z kosztem usunięcia dla Next.js, Turborepo i Test coverage, 8 cache z notatkami, co najmniej 24,5 GB do zwolnienia. Czerwona ramka nad przyciskami wymienia worktree z niezacommitowanymi zmianami, a przycisk „Remove and discard changes” jest nieaktywny, dopóki nie zaznaczysz zgody na utratę zmian.">
           </figure>
         </article>
 
@@ -239,7 +314,8 @@
               miejsce na dysku, na którym dany folder faktycznie leży, i liczbę worktree gotowych do usunięcia.
             </p>
             <ul>
-              <li>Odświeża się co 15 minut, po kliknięciu <strong>Refresh now</strong> i po każdym sprzątaniu.</li>
+              <li>Odświeża się co 15 minut, po kliknięciu <strong>Refresh now</strong> oraz po każdym skanie i sprzątaniu.</li>
+              <li>Gdy lista w oknie nie zgadza się już z licznikiem w pasku menu, okno o tym mówi i proponuje ponowny skan.</li>
               <li>Odświeżanie w tle nie łączy się z siecią i nie przechodzi przez <code>node_modules</code>.</li>
               <li>Na macOS możesz ukryć ikonę w Docku.</li>
               <li>Ustawienia pokazują, ile trwało ostatnie odświeżenie i ile procesów Git uruchomiło.</li>
@@ -262,25 +338,26 @@
         <ol class="steps">
           <li>
             <h3>Wybierz folder</h3>
-            <p>Kliknij <strong>Select Folder</strong> i wskaż katalog z projektami.</p>
+            <p>Kliknij <strong>Choose Folder…</strong> i wskaż katalog z projektami.</p>
           </li>
           <li>
             <h3>Poczekaj na skan</h3>
-            <p>Jeden skan znajduje zarówno foldery <code>node_modules</code>, jak i zmergowane worktree.</p>
+            <p>Jeden skan znajduje foldery <code>node_modules</code>, foldery buildów i zmergowane worktree. Karty wypełniają się, gdy wraca każdy skan, a <strong>Stop</strong> go przerywa.</p>
           </li>
           <li>
             <h3>Przejrzyj wyniki</h3>
-            <p>Najpierw <code>node_modules</code>, niżej worktree. Zaznacz to, czego nie potrzebujesz.</p>
+            <p>Przegląd pokazuje sumę, sugestie i największe pozycje każdej kategorii, a <strong>Review all ›</strong> pełną listę. Zaznacz to, czego nie potrzebujesz.</p>
           </li>
           <li>
             <h3>Usuń zaznaczone</h3>
-            <p>Kliknij <strong>Remove Selected</strong> i potwierdź. Oba panele usuwasz za jednym razem.</p>
+            <p>Kliknij <strong>Review and Remove…</strong>, przejrzyj zebrane zaznaczenie i potwierdź. Wszystkie kategorie, łącznie z cache, czyścisz za jednym razem.</p>
           </li>
         </ol>
         <p class="note">
-          <strong>Cache deweloperskie</strong> nie wymagają wybierania folderu. Kliknij <strong>Scan caches</strong>,
-          przejrzyj grupy i przy każdej pozycji sprawdź, jak zostanie wyczyszczona: usunięta, opróżniona w miejscu
-          czy przekazana do <code>prune</code> narzędzia, do którego należy.
+          <strong>Cache deweloperskie</strong> nie wymagają wybierania folderu: aplikacja skanuje je przy starcie,
+          a <strong>Rescan caches</strong> skanuje je ponownie. Przejrzyj grupy i przy każdej pozycji sprawdź, jak
+          zostanie wyczyszczona: usunięta, opróżniona w miejscu czy przekazana do <code>prune</code> narzędzia,
+          do którego należy. Zaznaczone cache trafiają do tego samego przeglądu <strong>Review and Remove…</strong>.
         </p>
       </div>
     </section>
@@ -293,38 +370,59 @@
         </div>
         <ul class="gallery">
           <li>
-            <a href="./assets/screenshots/empty-desktop.webp" data-lightbox data-caption="Ekran startowy">
+            <a href="./assets/screenshots/empty-desktop.webp" data-lightbox data-caption="Przed wybraniem folderu">
               <img src="./assets/screenshots/empty-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Ekran startowy przed wybraniem folderu, z pustym panelem Developer caches i przyciskiem Scan caches.">
-              <span>Ekran startowy</span>
+                   alt="Przegląd przed wybraniem folderu: cache deweloperskie przeskanowane przy starcie, karty pozostałych kategorii z przyciskiem Choose Folder….">
+              <span>Przed wybraniem folderu</span>
             </a>
           </li>
           <li>
-            <a href="./assets/screenshots/overview-desktop.webp" data-lightbox data-caption="Wyniki skanu node_modules">
+            <a href="./assets/screenshots/scanning-desktop.webp" data-lightbox data-caption="Skan w toku">
+              <img src="./assets/screenshots/scanning-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="Przegląd w trakcie skanu: pasek postępu liczony względem poprzedniego skanu („of about 0:48”) z przyciskiem Stop, karta worktree już wypełniona, karty node_modules i folderów buildów czekają na wynik.">
+              <span>Skan w toku</span>
+            </a>
+          </li>
+          <li>
+            <a href="./assets/screenshots/overview-desktop.webp" data-lightbox data-caption="Przegląd po skanie">
               <img src="./assets/screenshots/overview-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Wyniki skanu: lista folderów node_modules z rozmiarami i zaznaczeniem.">
-              <span>Wyniki skanu node_modules</span>
+                   alt="Przegląd po skanie: suma do odzyskania, pasek dysku, sugestie i cztery karty kategorii z zaznaczonymi pozycjami.">
+              <span>Przegląd po skanie</span>
+            </a>
+          </li>
+          <li>
+            <a href="./assets/screenshots/node-modules-desktop.webp" data-lightbox data-caption="node_modules">
+              <img src="./assets/screenshots/node-modules-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="Strona node_modules z menedżerem pakietów, wykrytymi technologiami, datą zmiany i rozmiarem; cztery foldery zaznaczone.">
+              <span>node_modules</span>
+            </a>
+          </li>
+          <li>
+            <a href="./assets/screenshots/builds-desktop.webp" data-lightbox data-caption="Foldery buildów">
+              <img src="./assets/screenshots/builds-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="Foldery buildów pogrupowane według narzędzi, z notą „What you lose” w nagłówku każdej grupy.">
+              <span>Foldery buildów</span>
             </a>
           </li>
           <li>
             <a href="./assets/screenshots/worktrees-desktop.webp" data-lightbox data-caption="Zmergowane Git worktree">
               <img src="./assets/screenshots/worktrees-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Lista zmergowanych worktree z chronionymi pozycjami i porównanymi gałęziami bazowymi.">
+                   alt="Zmergowane worktree z filtrami, oznaczeniem niezacommitowanych zmian, zablokowaną pozycją i porównanymi gałęziami bazowymi.">
               <span>Zmergowane Git worktree</span>
             </a>
           </li>
           <li>
             <a href="./assets/screenshots/caches-desktop.webp" data-lightbox data-caption="Cache deweloperskie">
               <img src="./assets/screenshots/caches-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Cache deweloperskie pogrupowane według rodzaju, z metodą czyszczenia przy każdej pozycji.">
+                   alt="Cache deweloperskie pogrupowane według rodzaju, z metodą czyszczenia i notatką przy każdej pozycji.">
               <span>Cache deweloperskie</span>
             </a>
           </li>
           <li>
-            <a href="./assets/screenshots/confirm-desktop.webp" data-lightbox data-caption="Potwierdzenie usunięcia">
-              <img src="./assets/screenshots/confirm-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
-                   alt="Okno potwierdzenia z liczbą folderów i worktree oraz miejscem do zwolnienia.">
-              <span>Potwierdzenie usunięcia</span>
+            <a href="./assets/screenshots/review-desktop.webp" data-lightbox data-caption="Przegląd przed usunięciem">
+              <img src="./assets/screenshots/review-desktop.webp" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="Panel przeglądu z zaznaczeniem ze wszystkich ekranów; przycisk usuwania czeka na zgodę na utratę niezacommitowanych zmian w jednym worktree.">
+              <span>Przegląd przed usunięciem</span>
             </a>
           </li>
           <li>

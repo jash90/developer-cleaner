@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --no-warnings --experimental-strip-types --test src/utils/cleanupSummary.test.mjs",
+    "test": "node --no-warnings --experimental-strip-types --test src/utils/cleanupSummary.test.mjs src/utils/suggestions.test.mjs src/utils/scanStop.test.mjs src/utils/scanState.test.mjs src/utils/selection.test.mjs src/utils/diskSpace.test.mjs src/utils/categories.test.mjs",
     "build": "node node_modules/@typescript/native/bin/tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

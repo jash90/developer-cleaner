@@ -6,6 +6,7 @@ import {
   nodeModulesFailures,
   removeCandidatesWithinPaths,
 } from '../utils/cleanupSummary';
+import { isScanStopped } from '../utils/scanStop';
 
 export interface NodeModulesDeletion {
   results: DeleteResult[];
@@ -19,6 +20,9 @@ export function useNodeModules() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [scanPath, setScanPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Stopped by the user: the list is empty because the scan did not finish, not because
+  // nothing was found.
+  const [wasStopped, setWasStopped] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'size', direction: 'desc' });
 
   const sortedFolders = useMemo(() => {
@@ -30,7 +34,9 @@ export function useNodeModules() {
           comparison = a.parent_project.localeCompare(b.parent_project);
           break;
         case 'size':
-          comparison = a.size - b.size;
+          // The figure each row shows: what a delete frees, not the nominal size, which counts
+          // pnpm and bun hardlinks into a shared store that survives the delete.
+          comparison = a.reclaimable_size - b.reclaimable_size;
           break;
         case 'manager':
           comparison = a.package_manager.localeCompare(b.package_manager);
@@ -49,6 +55,7 @@ export function useNodeModules() {
 
     setIsScanning(true);
     setError(null);
+    setWasStopped(false);
     setFolders([]);
     setSelectedPaths(new Set());
     setScanPath(path);
@@ -58,7 +65,8 @@ export function useNodeModules() {
       setFolders(result.folders);
       return result;
     } catch (err) {
-      setError(`Scan failed: ${err}`);
+      if (isScanStopped(err)) setWasStopped(true);
+      else setError(`Scan failed: ${err}`);
       return null;
     } finally {
       setIsScanning(false);
@@ -84,6 +92,17 @@ export function useNodeModules() {
   const deselectAll = useCallback(() => {
     setSelectedPaths(new Set());
   }, []);
+
+  /** Tick or untick the given rows (e.g. the ones a filter shows), leaving the rest alone. */
+  const setPathsSelected = useCallback((paths: string[], selected: boolean) => {
+    const known = new Set(folders.map((folder) => folder.path));
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      paths.filter((path) => known.has(path))
+        .forEach((path) => (selected ? next.add(path) : next.delete(path)));
+      return next;
+    });
+  }, [folders]);
 
   const deleteSelected = useCallback(async (
     paths: string[],
@@ -149,25 +168,20 @@ export function useNodeModules() {
     ));
   }, [folders]);
 
-  const selectedSize = useMemo(() => {
-    return folders
-      .filter(f => selectedPaths.has(f.path))
-      .reduce((sum, f) => sum + f.size, 0);
-  }, [folders, selectedPaths]);
-
   return {
     folders: sortedFolders,
     selectedPaths,
     isScanning,
+    wasStopped,
     isDeleting,
     scanPath,
-    selectedSize,
     error,
     sortConfig,
     scan,
     toggleSelection,
     selectAll,
     deselectAll,
+    setPathsSelected,
     deleteSelected,
     reconcileAfterCleanup,
     setSort,

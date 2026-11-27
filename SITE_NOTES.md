@@ -1,14 +1,15 @@
 # SITE_NOTES — analiza repozytorium pod stronę GitHub Pages
 
-Źródło treści dla strony w `site/`. Wszystko poniżej wynika z kodu i README w tym repo (stan: v1.5.0, commit `bf39e67`).
+Źródło treści dla strony w `site/`. Wszystko poniżej wynika z kodu i README w tym repo (stan: v1.8.0, commit `61386b3`).
 
 ## Czym jest aplikacja
 
-**Developer Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po trzech rodzajach śmieci deweloperskich:
+**Developer Cleaner** — desktopowa aplikacja (Windows, macOS, Linux), która odzyskuje miejsce na dysku po czterech rodzajach śmieci deweloperskich:
 
 1. folderach `node_modules` w projektach (`scan_for_node_modules`, `delete_folders` — `src-tauri/src/commands.rs`),
-2. zmergowanych Git worktree (`scan_for_merged_worktrees`, `delete_merged_worktrees` — `src-tauri/src/git_worktrees.rs`),
-3. współdzielonych cache'ach narzędzi poza projektami (`scan_for_dev_caches`, `clean_dev_caches` — `src-tauri/src/dev_caches.rs`).
+2. folderach buildów w projektach: Cargo `target`, CocoaPods `Pods`, `.next`, `.nx`, `.turbo`, androidowe `.cxx`, `coverage`, `.expo` (znajduje je ten sam przebieg `scan_for_node_modules` jako `build_artifacts`; usuwa `delete_build_artifacts` — `src-tauri/src/build_artifacts.rs`). Folder jest oferowany tylko przy znacznikach narzędzia obok i w środku (np. `Cargo.toml` + `CACHEDIR.TAG`, `Podfile` + `Manifest.lock`) i gdy Git nic w nim nie śledzi; sprawdzenie powtarza się przed usunięciem,
+3. zmergowanych Git worktree (`scan_for_merged_worktrees`, `delete_merged_worktrees` — `src-tauri/src/git_worktrees.rs`),
+4. współdzielonych cache'ach narzędzi poza projektami (`scan_for_dev_caches`, `clean_dev_caches` — `src-tauri/src/dev_caches.rs`).
 
 Problem: te foldery rosną niepostrzeżenie do dziesiątek GB, a naiwne liczenie rozmiaru kłamie (hardlinki pnpm/bun, pliki rzadkie, pliki wyrzucone do iCloud).
 
@@ -30,18 +31,21 @@ Developerzy JavaScript/TypeScript (i szerzej: każdy, kto trzyma dużo repozytor
 | Funkcja | Gdzie w kodzie |
 |---|---|
 | Równoległe skanowanie wybranego folderu (Rayon) | `commands.rs` |
-| Rozmiar „do odzyskania” vs nominalny (hardlinki, sparse, iCloud) | `fs_size.rs`, `FolderList.tsx`, `CacheList.tsx` |
-| Wykrywanie menedżera pakietów po lockfile (npm/yarn/pnpm/bun) | `commands.rs`, `FolderList.tsx` (badge) |
-| Wykrywanie technologii z `package.json` (top packages) | `commands.rs`, `FolderList.tsx` |
-| Sortowanie po nazwie, rozmiarze, menedżerze | `SortControls.tsx`, `useNodeModules.ts` |
-| Zmergowane worktree: porównanie z `origin/HEAD`, `main`, `master`, `development`, `develop`; wykrywanie squash merge; ochrona brudnych/zablokowanych; wpisy „stale” czyszczone `git worktree prune`; gałęzie zostają | `git_worktrees.rs`, `WorktreeList.tsx` |
-| Cache deweloperskie: npm (`_cacache`, `_npx`), pnpm (aktywny store → `pnpm store prune`, porzucone store'y), bun, yarn (Berry i Classic), uv (`uv cache prune`), Gradle (stare wersje), puppeteer (stare buildy), nvm (stare wersje Node), logi Homebrew (opróżniane w miejscu) | `dev_caches.rs`, `CacheList.tsx` |
+| Rozmiar „do odzyskania” vs nominalny (hardlinki, sparse, iCloud) | `fs_size.rs`, `NodeModulesPage.tsx`, `CachesPage.tsx` |
+| Wykrywanie menedżera pakietów po lockfile (npm/yarn/pnpm/bun) | `commands.rs`, `NodeModulesPage.tsx` |
+| Wykrywanie technologii z `package.json` (top packages) | `commands.rs`, `NodeModulesPage.tsx` |
+| Sortowanie po nazwie, rozmiarze, menedżerze (nagłówki kolumn) | `NodeModulesPage.tsx`, `useNodeModules.ts` |
+| Przegląd: suma do odzyskania (każdy bajt liczony raz), pasek dysku z wolnym miejscem teraz i po usunięciu, cztery karty z największymi pozycjami, karty wypełniane w miarę powrotu skanów, postęp względem poprzedniego skanu folderu, Stop (`cancel_scan`) | `Overview.tsx`, `Hero.tsx`, `CategoryCard.tsx`, `disk_space.rs`, `scan_cancel.rs` |
+| Sugestie od najbezpieczniejszych; „Select” tylko dla pozycji o niskim ryzyku z jednej kategorii (porzucone store'y, czyste niezablokowane worktree), reszta otwiera przefiltrowaną listę | `utils/suggestions.ts` (testy: `suggestions.test.mjs`), `SuggestionList.tsx` |
+| Foldery buildów: grupy per narzędzie, każda z własnym polem wyboru i notą „What you lose”; nic nie zaznacza kilku narzędzi naraz | `build_artifacts.rs`, `BuildFoldersPage.tsx`, `useBuildArtifacts.ts` |
+| Zmergowane worktree: porównanie z `origin/HEAD`, `main`, `master`, `development`, `develop`; wykrywanie squash merge; brudne da się zaznaczyć (od 1.6.0), zablokowanych nie; wpisy „stale” czyszczone `git worktree prune`; gałęzie zostają | `git_worktrees.rs`, `WorktreesPage.tsx` |
+| Cache deweloperskie: npm (`_cacache`, `_npx`), pnpm (aktywny store → `pnpm store prune`, porzucone store'y), bun, yarn (Berry i Classic), uv (`uv cache prune`), Gradle (stare wersje), puppeteer (stare buildy), nvm (stare wersje Node), logi Homebrew (opróżniane w miejscu); skanowane przy starcie aplikacji | `dev_caches.rs`, `CachesPage.tsx`, `useDevCaches.ts` |
 | „Select safe” — zaznacza tylko cele oznaczone jako bezpieczne | `useDevCaches.ts` |
-| Wspólne potwierdzenie usuwania z podsumowaniem | `ConfirmDialog.tsx`, `App.tsx` |
+| Jeden panel „Review and Remove…” zbiera zaznaczenie ze wszystkich ekranów, powtarza koszt każdego zaznaczonego narzędzia i notatki cache, pozwala odznaczać; brudne worktree wymagają zaznaczenia zgody przypiętej nad przyciskami, zgoda resetuje się przy zmianie listy, domyślny przycisk to „Keep Everything” | `ReviewDrawer.tsx`, `App.tsx`, `useCleanup.ts` |
 | Tryb paska menu: ukrycie ikony w Docku (tylko macOS), obserwowane foldery, liczba worktree do usunięcia + wolne miejsce na wolumenie, odświeżanie co 15 min | `tray.rs`, `settings.rs`, `SettingsPanel.tsx` |
 | Diagnostyka tła (czas ostatniego odświeżenia, liczba procesów Git) | `SettingsPanel.tsx` (`tick_diagnostics`) |
 
-Ekrany: jedno okno (nagłówek, pasek podsumowania skanu, panele `node_modules` / Merged Git worktrees / Developer caches, stopka z zaznaczeniem), dialog potwierdzenia, panel ustawień. Menu w pasku menu jest natywne (Tauri tray).
+Ekrany: przegląd (pasek narzędzi z Rescan, suma i pasek dysku, sugestie, cztery karty kategorii, pasek zaznaczenia), osobna strona dla każdej kategorii (`node_modules` / Build folders / Merged worktrees / Developer caches), wysuwany panel przeglądu przed usunięciem, panel ustawień. Menu w pasku menu jest natywne (Tauri tray).
 
 ## i18n
 
@@ -57,12 +61,15 @@ Brak. Interfejs aplikacji jest tylko po angielsku (napisy wprost w komponentach,
 ## Identyfikacja wizualna
 
 - Logo/ikona: `src-tauri/icons/app-icon.png`, `128x128.png` (wygenerowana ikona z commita `ab03be0`).
-- Kolory (Tailwind w komponentach): tło `gray-50`, akcent główny `blue-600` (przycisk Select Folder), `amber` dla worktree, `sky` dla cache, `red-600` dla akcji destrukcyjnych, `green-600` dla odzyskanego miejsca.
+- Kolory (Tailwind w komponentach): tło `gray-50`, akcent główny `blue-600` (przycisk Choose Folder…), `orange` dla folderów buildów, `amber` dla worktree, `sky` dla cache, `red-600` dla akcji destrukcyjnych, `green-600` dla odzyskanego miejsca.
 - Font: systemowy stos (`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, …` — `src/index.css`).
 - Aplikacja nie ma trybu ciemnego — strona ma, z tą samą paletą.
 
-## Istniejące Pages / docs
+## Pages: publikacja i utrzymanie
 
-- Brak gałęzi `gh-pages`, brak workflow Pages.
-- `docs/` istnieje lokalnie (nieśledzony `docs/second-brain`, notatki deweloperskie) → strona w `site/`, workflow `.github/workflows/pages.yml` publikuje `site/`.
-- Istniejące workflow: `release.yml` (build instalatorów), `pullfrog.yml` (review).
+- Strona: `site/` (PL `index.html`, EN `en/index.html`), publikowana przez `.github/workflows/pages.yml` (Pages `build_type: workflow`, bez gałęzi `gh-pages`, bez Jekylla).
+- Zrzuty i obrazy OG: `npm run screenshots` uruchamia prawdziwy frontend w Vite z atrapą mostu Tauri i fikcyjnymi danymi, zapisuje `site/assets/screenshots/*.webp` (wymaga `cwebp` w PATH, `brew install webp`; bez niego skrypt kończy się przed zapisem czegokolwiek; empty, scanning, node-modules, builds, worktrees, caches, overview, review, settings), a potem renderuje `scripts/og-image.html` do `og-image.png` (pl) i `og-image-en.png` (en), 1200×630.
+- Kontrola: `npm run site:verify` (konsola, obrazy, linki i kotwice, zgodność struktury PL/EN, 390 px, tryb ciemny, lightbox, nagłówek z canonical/hreflang/OG/JSON-LD, absolutne URL-e, rozmiar obrazów OG, nieużyte zrzuty, stara nazwa w dowolnym miejscu).
+- Stara nazwa (Node Modules Cleaner) nie występuje nigdzie na stronie; notkę dla aktualizujących usunięto.
+- `robots.txt` nie ma sensu na stronie projektu (roboty czytają go tylko w katalogu głównym hosta); `sitemap.xml` zgłasza się w Search Console ręcznie.
+- Stary adres `https://jash90.github.io/node-modules-cleaner/` (PL i `en/`) przekierowuje na nowy: GitHub sam nie przekierowuje stron Pages po zmianie nazwy repozytorium, więc przekierowanie to strony-zaślepki w repozytorium strony użytkownika `jash90/jash90.github.io` (`node-modules-cleaner/index.html` i `node-modules-cleaner/en/`, meta refresh + `location.replace`, `noindex`, canonical na nowy adres). Ich usunięcie przywróci 404.

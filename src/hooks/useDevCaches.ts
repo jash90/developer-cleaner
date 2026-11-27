@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { CacheCleanResult, CacheScanResult, CacheTarget } from '../types';
 import {
@@ -70,6 +70,17 @@ export function useDevCaches() {
 
   const deselectAll = useCallback(() => setSelectedIds(new Set()), []);
 
+  /** Tick or untick the given rows (e.g. the ones a filter shows), leaving the rest alone. */
+  const setPathsSelected = useCallback((paths: string[], selected: boolean) => {
+    const known = new Set(targets.map(keyOf));
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      paths.filter((path) => known.has(path))
+        .forEach((path) => (selected ? next.add(path) : next.delete(path)));
+      return next;
+    });
+  }, [keyOf, targets]);
+
   /** The cache step of the unified cleanup; returns what the backend reported per target. */
   const cleanSelected = useCallback(async (): Promise<CacheCleanResult[]> => {
     if (isCleaning || isScanning || selectedIds.size === 0) return [];
@@ -108,6 +119,15 @@ export function useDevCaches() {
   }, [isCleaning, isScanning, keyOf, selectedIds, targets]);
 
   const clearError = useCallback(() => setError(null), []);
+
+  // Caches live at fixed locations, so they are scanned at launch instead of waiting for a
+  // click. The ref keeps StrictMode's second effect run from starting a second scan.
+  const launchScanStarted = useRef(false);
+  useEffect(() => {
+    if (launchScanStarted.current) return;
+    launchScanStarted.current = true;
+    void scan();
+  }, [scan]);
 
   const totalReclaimable = useMemo(
     () => targets.reduce((sum, target) => sum + target.reclaimable_size, 0),
@@ -154,6 +174,7 @@ export function useDevCaches() {
     toggleSelection,
     selectSafe,
     deselectAll,
+    setPathsSelected,
     cleanSelected,
     clearError,
   };

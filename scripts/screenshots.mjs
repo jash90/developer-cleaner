@@ -1,4 +1,6 @@
-// Regenerates the screenshots used by the GitHub Pages site in site/assets/screenshots/.
+// Regenerates the screenshots used by the GitHub Pages site in site/assets/screenshots/,
+// and the two Open Graph images (site/assets/og-image.png for pl, og-image-en.png for en),
+// which are rendered from scripts/og-image.html around the fresh overview screenshot.
 //
 //   npx playwright install chromium   # once per machine
 //   npm run screenshots
@@ -8,12 +10,13 @@
 // headless Chromium, and that bridge is replaced with fixtures: every path, project and
 // branch below is fictional, so no real machine data can leak into the images.
 //
-// Output is WebP when `cwebp` is on PATH (brew install webp), PNG otherwise.
+// Output is WebP, which the pages reference, so `cwebp` must be on PATH (brew install webp).
+// Without it the script stops before writing anything.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 
@@ -26,19 +29,20 @@ const MB = 1024 ** 2;
 const HOME = '/Users/dev';
 const PROJECTS = `${HOME}/Projects`;
 const DAY = 86_400;
+const now = Math.floor(Date.now() / 1000);
 
 // ---------------------------------------------------------------------------
 // Fixtures — shapes mirror src/types.ts exactly (snake_case, as serde sends them).
 // ---------------------------------------------------------------------------
 
-function folder(project, manager, reclaimable, nominal, tech, subpath = '') {
-  const parent = `${PROJECTS}/${project}${subpath}`;
+function folder(project, manager, reclaimable, nominal, tech, ageDays) {
+  const parent = `${PROJECTS}/${project}`;
   return {
     path: `${parent}/node_modules`,
     size: nominal,
     allocated_size: nominal,
     reclaimable_size: reclaimable,
-    last_modified: null,
+    last_modified: now - ageDays * DAY,
     parent_project: project,
     package_manager: manager,
     top_packages: tech.map((name) => ({ name })),
@@ -46,16 +50,30 @@ function folder(project, manager, reclaimable, nominal, tech, subpath = '') {
 }
 
 const nodeModules = [
-  folder('storefront-web', 'npm', 1.42 * GB, 1.42 * GB, ['next', 'react', 'typescript', 'tailwindcss']),
-  folder('mobile-app', 'yarn', 912 * MB, 912 * MB, ['expo', 'react-native', 'typescript']),
-  folder('admin-dashboard', 'pnpm', 64 * MB, 780 * MB, ['vite', 'react', 'typescript', 'tailwindcss']),
-  folder('api-gateway', 'npm', 412 * MB, 412 * MB, ['@nestjs', 'typescript', 'esbuild']),
-  folder('design-system', 'pnpm', 38 * MB, 655 * MB, ['react', 'vite', 'turbo']),
-  folder('marketing-site', 'bun', 21 * MB, 318 * MB, ['astro', 'tailwindcss']),
-  folder('legacy-crm', 'npm', 286 * MB, 286 * MB, ['@angular', 'webpack', 'typescript']),
-  folder('edge-worker', 'bun', 58 * MB, 58 * MB, ['hono', 'typescript']),
-  folder('docs-portal', 'yarn', 174 * MB, 174 * MB, ['gatsby', 'react']),
+  folder('storefront-web', 'npm', 1.42 * GB, 1.42 * GB, ['next', 'react', 'typescript', 'tailwindcss'], 2),
+  folder('mobile-app', 'yarn', 912 * MB, 912 * MB, ['expo', 'react-native', 'typescript'], 12),
+  folder('admin-dashboard', 'pnpm', 64 * MB, 780 * MB, ['vite', 'react', 'typescript', 'tailwindcss'], 34),
+  folder('api-gateway', 'npm', 412 * MB, 412 * MB, ['@nestjs', 'typescript', 'esbuild'], 40),
+  folder('design-system', 'pnpm', 38 * MB, 655 * MB, ['react', 'vite', 'turbo'], 8),
+  folder('marketing-site', 'bun', 21 * MB, 318 * MB, ['astro', 'tailwindcss'], 150),
+  folder('legacy-crm', 'npm', 286 * MB, 286 * MB, ['@angular', 'webpack', 'typescript'], 410),
+  folder('edge-worker', 'bun', 58 * MB, 58 * MB, ['hono', 'typescript'], 21),
+  folder('docs-portal', 'yarn', 174 * MB, 174 * MB, ['gatsby', 'react'], 95),
 ];
+
+// Build folders: one per kind, in projects of their own or beside the node_modules above.
+// None sits inside a `.worktrees` checkout, so no size is de-duplicated against a worktree.
+function artifact(kind, project, relative, reclaimable, ageDays) {
+  return {
+    path: `${PROJECTS}/${project}/${relative}`,
+    kind,
+    size: reclaimable,
+    allocated_size: reclaimable,
+    reclaimable_size: reclaimable,
+    last_modified: now - ageDays * DAY,
+    parent_project: project,
+  };
+}
 
 function worktree(repo, dir, branch, base, extra = {}) {
   return {
@@ -102,13 +120,24 @@ const worktrees = [
   }),
 ];
 
+const buildArtifacts = [
+  artifact('cargo_target', 'image-resizer', 'target', 7.4 * GB, 64),
+  artifact('cargo_target', 'desktop-notes', 'src-tauri/target', 3.2 * GB, 21),
+  artifact('cocoapods', 'mobile-app', 'ios/Pods', 1.18 * GB, 12),
+  artifact('next_build', 'storefront-web', '.next', 642 * MB, 2),
+  artifact('next_build', 'docs-portal', '.next', 318 * MB, 95),
+  artifact('nx_cache', 'platform-monorepo', '.nx', 236 * MB, 30),
+  artifact('turbo_cache', 'design-system', '.turbo', 96 * MB, 8),
+  artifact('android_cxx', 'mobile-app', 'android/app/.cxx', 1.36 * GB, 12),
+  artifact('coverage', 'api-gateway', 'coverage', 18 * MB, 40),
+  artifact('expo_state', 'mobile-app', '.expo', 2 * MB, 12),
+];
+
 const worktreeDiagnostics = [
   `${PROJECTS}/storefront-web: compared against origin/HEAD, origin/main, origin/development`,
   `${PROJECTS}/api-gateway: compared against origin/HEAD, origin/main, origin/develop`,
   `${PROJECTS}/mobile-app: compared against origin/HEAD, origin/main`,
 ];
-
-const now = Math.floor(Date.now() / 1000);
 
 function cache(id, kind, label, path, reclaimable, extra = {}) {
   return {
@@ -188,9 +217,24 @@ const ticks = [2.9, 1.4, 1.1, 0.9, 1.0, 0.8].map((seconds, index) => ({
   removable_worktrees: 4,
 }));
 
+// The volume the scanned folder is on, for the disk bar at the top of the overview.
+const diskSpace = {
+  available_bytes: 41.6 * GB,
+  total_bytes: 494.4 * GB,
+  mount_point: '/System/Volumes/Data',
+  volume_name: 'Macintosh HD',
+};
+
+// How long the last scan of the folder took; the mid-scan shot shows progress against it.
+const LAST_SCAN_MS = 48_000;
+
 const fixtures = {
+  home: HOME,
   scanPath: PROJECTS,
+  diskSpace,
+  lastScanMs: LAST_SCAN_MS,
   nodeModules,
+  buildArtifacts,
   worktrees,
   worktreeDiagnostics,
   caches,
@@ -207,12 +251,25 @@ function installTauriMock(data) {
   let current = structuredClone(data.settings);
   const sum = (items, key) => items.reduce((total, item) => total + item[key], 0);
 
+  // Seeds "how long the last scan took" so the mid-scan shot shows progress against it.
+  try {
+    localStorage.setItem(`developer-cleaner:last-folder-scan-ms:${data.scanPath}`, String(data.lastScanMs));
+  } catch {
+    // Without storage the progress bar shows elapsed time only.
+  }
+  // While set, the folder walk waits for it to resolve: the mid-scan shot is taken meanwhile.
+  window.__folderScanHold = null;
+
   const handlers = {
     'plugin:dialog|open': () => data.scanPath,
+    // homeDir(), so paths under the fictional home folder read as ~/….
+    'plugin:path|resolve_directory': () => data.home,
     scan_for_node_modules: async ({ path }) => {
       await wait(150);
+      if (window.__folderScanHold) await window.__folderScanHold;
       return {
         folders: data.nodeModules,
+        build_artifacts: data.buildArtifacts,
         total_size: sum(data.nodeModules, 'size'),
         total_allocated_size: sum(data.nodeModules, 'allocated_size'),
         total_reclaimable_size: sum(data.nodeModules, 'reclaimable_size'),
@@ -248,9 +305,28 @@ function installTauriMock(data) {
     }),
     tick_diagnostics: () => data.ticks,
     refresh_tray_now: () => null,
+    get_disk_space: () => data.diskSpace,
+    // Never called while capturing; here so the mock covers every command the window sends.
+    cancel_scan: () => null,
+    delete_folders: ({ paths }) => paths.map((path) => ({
+      success: true, path, removed_bytes: 0, error: null, failed_paths: [], sudo_hint: null,
+    })),
+    delete_build_artifacts: ({ paths }) => paths.map((path) => ({
+      success: true, path, removed_bytes: 0, error: null, failed_paths: [], sudo_hint: null,
+    })),
+    delete_merged_worktrees: ({ removals }) => removals.map((removal) => ({
+      success: true, path: removal.worktree_path, error: null, already_gone: false,
+    })),
+    clean_dev_caches: ({ targets }) => targets.map((target) => ({
+      id: target.id, path: target.path, success: true, removed_bytes: 0, error: null, output: null,
+    })),
+    // The window listens for the menu bar's counts; no event ever arrives here.
+    'plugin:event|listen': () => 1,
+    'plugin:event|unlisten': () => null,
   };
 
   let callbackId = 0;
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },
     invoke: async (cmd, args = {}) => {
@@ -272,24 +348,22 @@ function installTauriMock(data) {
 // Capture
 // ---------------------------------------------------------------------------
 
-const hasCwebp = spawnSync('cwebp', ['-version']).status === 0;
 const written = [];
 
 async function save(page, name, options = {}) {
   const png = join(tmpDir, `${name}.png`);
   await page.screenshot({ path: png, ...options });
-  let file;
-  if (hasCwebp) {
-    file = join(outDir, `${name}.webp`);
-    execFileSync('cwebp', ['-quiet', '-q', '82', '-m', '6', png, '-o', file]);
-  } else {
-    file = join(outDir, `${name}.png`);
-    execFileSync('cp', [png, file]);
-  }
+  const file = join(outDir, `${name}.webp`);
+  execFileSync('cwebp', ['-quiet', '-q', '82', '-m', '6', png, '-o', file]);
   written.push(file);
 }
 
 async function main() {
+  // PNG fallbacks would sit unused next to stale WebP files the pages still show.
+  if (spawnSync('cwebp', ['-version']).status !== 0) {
+    console.error('cwebp not found on PATH. Install it (brew install webp) and run again; nothing was written.');
+    process.exit(1);
+  }
   rmSync(tmpDir, { recursive: true, force: true });
   mkdirSync(tmpDir, { recursive: true });
   mkdirSync(outDir, { recursive: true });
@@ -320,62 +394,98 @@ async function main() {
     });
 
     await page.goto(url, { waitUntil: 'networkidle' });
-    await page.getByText('No folder selected').waitFor();
-    await save(page, 'empty-desktop');
-
-    // Scan: the folder picker resolves instantly to the fixture path.
-    await page.getByRole('button', { name: 'Select Folder' }).click();
-    await page.getByText('Merged Git worktrees').waitFor();
-    await page.getByRole('button', { name: 'Scan caches' }).click();
-    await page.getByText('Abandoned stores').waitFor();
-
-    // A realistic selection so the footer with "Space to free" appears.
-    for (const project of ['storefront-web', 'mobile-app', 'api-gateway', 'legacy-crm']) {
-      await page.getByLabel(`Select node_modules in ${project}`).check();
-    }
-    await page.getByRole('button', { name: 'Select removable' }).click();
-    // Checking boxes scrolls them into view; the overview shot starts from the top.
-    const scroller = page.locator('main');
-    await scroller.evaluate((element) => { element.scrollTop = 0; });
-    await page.mouse.move(0, 0);
-    await save(page, 'overview-desktop');
-
-    // Open-graph preview at 1200x630 — the app's own minimum width, so no column is cut off.
-    await page.setViewportSize({ width: 1200, height: 630 });
-    await page.screenshot({ path: join(root, 'site', 'assets', 'og-image.png') });
-    await page.setViewportSize({ width: 1440, height: 900 });
-    written.push(join(root, 'site', 'assets', 'og-image.png'));
-
-    const scrollTo = async (text) => {
-      await page.getByText(text, { exact: true }).first().evaluate((element) => {
-        const section = element.closest('section');
-        const scroller = document.querySelector('main');
-        scroller.scrollTop += section.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
-      });
+    const card = (name) => page.getByRole('region', { name });
+    const back = () => page.getByRole('button', { name: '‹ Overview' }).click();
+    const reviewAll = (name) => card(name).getByRole('button', { name: 'Review all ›' }).click();
+    const settle = async () => {
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(150);
     };
 
-    await scrollTo('Merged Git worktrees');
-    await page.getByText('Base branches compared').click();
+    // Before a folder is chosen: the caches, scanned at launch, are already in.
+    await card('Developer caches').getByText(/^Largest/).waitFor();
+    await settle();
+    await save(page, 'empty-desktop');
+
+    // Mid-scan: the folder walk is held open; worktrees arrive first and fill in their card.
+    await page.evaluate(() => {
+      window.__folderScanHold = new Promise((release) => { window.__releaseFolderScan = release; });
+    });
+    await page.getByRole('button', { name: 'Choose Folder…' }).first().click();
+    await card('Merged worktrees').getByText(/^Largest/).waitFor();
+    await page.getByText(/0:0[4-9] of about 0:48/).waitFor();
+    await settle();
+    await save(page, 'scanning-desktop');
+    await page.evaluate(() => window.__releaseFolderScan());
+    await card('Build folders').getByText(/^Largest/).waitFor();
+
+    // Each category's own page, with a realistic selection made on it.
+    await reviewAll('node_modules');
+    for (const project of ['storefront-web', 'mobile-app', 'api-gateway', 'legacy-crm']) {
+      await page.getByLabel(`Select node_modules in ${project}`, { exact: true }).check();
+    }
+    await settle();
+    await save(page, 'node-modules-desktop');
+    await back();
+
+    // Build folders are selected one kind at a time; the cheap ones only.
+    await reviewAll('Build folders');
+    for (const tool of ['Next.js', 'Turborepo', 'Test coverage']) {
+      await page.getByLabel(`Select all ${tool} folders`, { exact: true }).check();
+    }
+    await settle();
+    await save(page, 'builds-desktop');
+    await back();
+
+    await reviewAll('Merged worktrees');
+    for (const branch of ['feature/checkout-v2', 'fix/cart-rounding', 'feature/rate-limits', 'release/2.4', 'chore/old-auth']) {
+      await page.getByLabel(`Select ${branch}`, { exact: true }).check();
+    }
+    await page.getByText(/^Base branches compared/).click();
+    await settle();
     await save(page, 'worktrees-desktop');
+    await back();
 
-    await scrollTo('Developer caches');
+    await reviewAll('Developer caches');
     await page.getByRole('button', { name: 'Select safe' }).click();
-    await page.mouse.move(0, 0);
+    await settle();
     await save(page, 'caches-desktop');
+    await back();
 
-    await scroller.evaluate((element) => { element.scrollTop = 0; });
-    await page.getByRole('button', { name: 'Remove Selected' }).click();
-    await page.getByText('Remove selected items?').waitFor();
-    await save(page, 'confirm-desktop');
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await settle();
+    await save(page, 'overview-desktop');
+
+    // The review drawer with a worktree that has uncommitted changes: it is named, and
+    // removing stays disabled until the loss is acknowledged.
+    await reviewAll('Merged worktrees');
+    await page.getByLabel('Select feature/search-filters', { exact: true }).check();
+    await back();
+    await page.getByRole('button', { name: 'Review and Remove…' }).click();
+    await page.getByText('will be permanently lost').waitFor();
+    await settle();
+    await save(page, 'review-desktop');
+    await page.getByRole('button', { name: 'Keep Everything' }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByText('Background refresh').waitFor();
     await page.getByText('Last run took').waitFor();
+    await settle();
     await save(page, 'settings-desktop');
 
     if (errors.length > 0) {
       throw new Error(`The app logged errors while capturing:\n${errors.join('\n')}`);
+    }
+
+    // Open Graph images: the template frames the overview screenshot written above.
+    const og = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
+    for (const [lang, name] of [['pl', 'og-image.png'], ['en', 'og-image-en.png']]) {
+      const template = pathToFileURL(join(root, 'scripts', 'og-image.html'));
+      template.search = `?lang=${lang}`;
+      await og.goto(template.href, { waitUntil: 'load' });
+      await og.evaluate(() => Promise.all([...document.images].map((image) => image.decode())));
+      const file = join(root, 'site', 'assets', name);
+      await og.screenshot({ path: file });
+      written.push(file);
     }
   } finally {
     await browser.close();

@@ -7,6 +7,7 @@ import { useMergedWorktrees } from './useMergedWorktrees';
 import { useNodeModules, type NodeModulesDeletion } from './useNodeModules';
 import { useBuildArtifacts, type BuildArtifactDeletion } from './useBuildArtifacts';
 import {
+  categoryTotals,
   countOutcome,
   countRemovableWorktrees,
   createCleanupSummary,
@@ -19,6 +20,11 @@ import {
   worktreesNeedingConsent,
 } from '../utils/cleanupSummary';
 import { formatSize } from '../utils/formatSize';
+import { isPruneTarget } from '../utils/categories';
+import { computeSuggestions, guardSelection, type Suggestion } from '../utils/suggestions';
+import { createStopGate } from '../utils/scanStop';
+import { listState } from '../utils/scanState';
+import { readLastScanDuration, saveLastScanDuration } from './scanTiming';
 import type { TrayStats, WorktreeDeleteResult } from '../types';
 
 /**
@@ -61,6 +67,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     error: cachesError,
     cleanSelected: cleanCaches,
     clearError: clearCachesError,
+    setPathsSelected: setCachePathsSelected,
+    deselectAll: deselectAllCaches,
   } = caches;
   const [lastReport, setLastReport] = useState<string[] | null>(null);
   const [scanPath, setScanPath] = useState<string | null>(null);
@@ -72,11 +80,24 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
   // the ones that arrive afterwards are compared with it.
   const [trayStats, setTrayStats] = useState<{ stats: TrayStats; receivedAt: number } | null>(null);
   const [listBuiltAt, setListBuiltAt] = useState(0);
+  // When the folder walk's list arrived. Build-folder ages are judged against it, so they are
+  // right as soon as that list is shown, without waiting for the slower worktree scan.
+  const [foldersListedAt, setFoldersListedAt] = useState(0);
+  // When the running folder scan started and how long the last full one of this folder took,
+  // so a long scan can show progress against something real.
+  const [folderScanTiming, setFolderScanTiming] = useState<{
+    startedAt: number;
+    expectedMs: number | null;
+  } | null>(null);
 
   // One walk finds node_modules and build folders; the build folders go to their own list.
   const scanNodeModules = useCallback(async (path: string) => {
     replaceBuildArtifacts([]);
+    const startedAt = Date.now();
+    setFolderScanTiming({ startedAt, expectedMs: readLastScanDuration(path) });
     const result = await scanNodeModulesOnly(path);
+    if (result) saveLastScanDuration(path, Date.now() - startedAt);
+    setFoldersListedAt(Date.now());
     replaceBuildArtifacts(result?.build_artifacts ?? []);
   }, [replaceBuildArtifacts, scanNodeModulesOnly]);
 
@@ -89,9 +110,38 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     };
   }, []);
 
-  const isScanning = isSelectingDirectory
-    || nodeModules.isScanning
-    || mergedWorktrees.isScanning;
+  // Each scan reports on its own, so a category is shown as soon as its own scan returns
+  // instead of waiting for the slowest one. `isScanning` is the union, for disabling actions.
+  const isScanningFolders = nodeModules.isScanning;
+  const isScanningWorktrees = mergedWorktrees.isScanning;
+  const isScanning = isSelectingDirectory || isScanningFolders || isScanningWorktrees;
+
+  // Stop ends the folder and worktree scans running now (each returns "stopped" and shows
+  // nothing partial); the caches scan is short and is left to finish. A scan started later
+  // is never affected: the backend hands each scan its own generation.
+  const [stopRequested, setStopRequested] = useState(false);
+  const isStopping = stopRequested && (isScanningFolders || isScanningWorktrees);
+  // A new scan waits for a stop still in flight, so that stop cannot end the new scan.
+  const [stopGate] = useState(() => createStopGate(() => invoke('cancel_scan')));
+  const stopScan = useCallback(() => {
+    setStopRequested(true);
+    void stopGate.stop().catch(() => setStopRequested(false));
+  }, [stopGate]);
+  const scanStopped = !isScanningFolders && !isScanningWorktrees
+    && (nodeModules.wasStopped || mergedWorktrees.wasStopped);
+  // Whether each list is a finished answer; an empty list means "none found" only when ready.
+  const folderListState = listState({
+    scanPath,
+    scanning: isScanningFolders,
+    stopped: nodeModules.wasStopped,
+    failed: Boolean(nodeModules.error) && nodeModules.folders.length === 0,
+  });
+  const worktreeListState = listState({
+    scanPath,
+    scanning: isScanningWorktrees,
+    stopped: mergedWorktrees.wasStopped,
+    failed: mergedWorktrees.scanFailed,
+  });
   const isDeleting = isCoordinatingDeletion
     || nodeModules.isDeleting
     || buildArtifacts.isDeleting
@@ -132,13 +182,78 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     selectedCaches,
   ]);
 
-  const availableSummary = useMemo(() => createCleanupSummary({
+  // Everything that could be removed right now, split by category; each byte counted once.
+  const totals = useMemo(() => categoryTotals({
     nodeModules: nodeModules.folders.map(toReclaimable),
     buildArtifacts: buildArtifacts.targets.map(toReclaimable),
     worktrees: mergedWorktrees.worktrees.filter((worktree) => (
       isSelectableWorktree(worktree) && !blockedWorktrees.has(worktree.path)
     )),
-  }), [blockedWorktrees, mergedWorktrees.worktrees, nodeModules.folders, buildArtifacts.targets]);
+    caches: cacheTargets.map(toReclaimable),
+  }), [
+    blockedWorktrees,
+    mergedWorktrees.worktrees,
+    nodeModules.folders,
+    buildArtifacts.targets,
+    cacheTargets,
+  ]);
+  // A prune hands the cache to its own tool, which frees an amount known only once it has run.
+  const totalsAreEstimate = cacheTargets.some(isPruneTarget);
+
+  // A category's list is known once its own scan has returned for the chosen folder.
+  const folderScanDone = scanPath !== null && !isSelectingDirectory && !isScanningFolders;
+  const worktreeScanDone = scanPath !== null && !isSelectingDirectory && !isScanningWorktrees;
+  const suggestions = useMemo(() => computeSuggestions({
+    buildArtifacts: folderScanDone ? buildArtifacts.targets : null,
+    worktrees: worktreeScanDone ? mergedWorktrees.worktrees : null,
+    blockedWorktreePaths: blockedWorktrees,
+    caches: isScanningCaches ? null : cacheTargets,
+    // Ages are judged against when the list was built, not a clock that moves during render.
+    nowSeconds: foldersListedAt / 1000,
+  }), [
+    blockedWorktrees,
+    buildArtifacts.targets,
+    cacheTargets,
+    folderScanDone,
+    foldersListedAt,
+    isScanningCaches,
+    mergedWorktrees.worktrees,
+    worktreeScanDone,
+  ]);
+
+  const setWorktreePathsSelected = mergedWorktrees.setPathsSelected;
+  /** A suggestion's "Select": adds only what still passes its rule, never while busy. */
+  const applySuggestion = useCallback((suggestion: Suggestion) => {
+    if (isScanning || isDeleting || isScanningCaches) return;
+    const { action } = suggestion;
+    if (action.type !== 'select') return;
+    const paths = guardSelection(action, {
+      worktrees: mergedWorktrees.worktrees,
+      caches: cacheTargets,
+      blockedWorktreePaths: blockedWorktrees,
+    });
+    if (action.category === 'worktrees') setWorktreePathsSelected(paths, true);
+    else setCachePathsSelected(paths, true);
+  }, [
+    blockedWorktrees,
+    cacheTargets,
+    isDeleting,
+    isScanning,
+    isScanningCaches,
+    mergedWorktrees.worktrees,
+    setCachePathsSelected,
+    setWorktreePathsSelected,
+  ]);
+
+  const deselectAllNodeModules = nodeModules.deselectAll;
+  const deselectAllBuildArtifacts = buildArtifacts.deselectAll;
+  const deselectAllWorktrees = mergedWorktrees.deselectAll;
+  const clearSelection = useCallback(() => {
+    deselectAllNodeModules();
+    deselectAllBuildArtifacts();
+    deselectAllWorktrees();
+    deselectAllCaches();
+  }, [deselectAllBuildArtifacts, deselectAllCaches, deselectAllNodeModules, deselectAllWorktrees]);
 
   const selectedWorktreesNeedingConsent = useMemo(() => worktreesNeedingConsent(
     mergedWorktrees.worktrees.filter((worktree) => (
@@ -164,6 +279,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
 
       const path = selected as string;
       setScanPath(path);
+      await stopGate.settled();
+      setStopRequested(false);
       await runCleanupScans(path, scanNodeModules, scanMergedWorktrees);
       setListBuiltAt(Date.now());
       refreshTray();
@@ -172,16 +289,18 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     } finally {
       setIsSelectingDirectory(false);
     }
-  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules]);
+  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, stopGate]);
 
   /** Scan the same folder again, without going through the picker. */
   const rescan = useCallback(async () => {
     if (!scanPath || isScanning || isDeleting) return;
     setLastReport(null);
+    await stopGate.settled();
+    setStopRequested(false);
     await runCleanupScans(scanPath, scanNodeModules, scanMergedWorktrees);
     setListBuiltAt(Date.now());
     refreshTray();
-  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, scanPath]);
+  }, [isDeleting, isScanning, scanMergedWorktrees, scanNodeModules, scanPath, stopGate]);
 
   // The window list is a snapshot from the last scan; the menu bar recounts every fifteen
   // minutes. When both describe the same folder and disagree, the list is the one that aged.
@@ -193,7 +312,8 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     scanPath,
     windowCount,
     isBusy: isScanning || isDeleting,
-    scanFailed: mergedWorktrees.scanFailed,
+    // A stopped scan left the list empty on purpose; comparing it with the menu bar says nothing.
+    scanFailed: mergedWorktrees.scanFailed || mergedWorktrees.wasStopped,
   });
 
   const deleteSelected = useCallback(async () => {
@@ -262,6 +382,7 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
       deletionInProgress.current = false;
       setIsCoordinatingDeletion(false);
       setListBuiltAt(Date.now());
+      setFoldersListedAt(Date.now());
       // The menu bar counts are now stale by definition.
       refreshTray();
     }
@@ -301,10 +422,25 @@ export function useCleanup(caches: ReturnType<typeof useDevCaches>) {
     mergedWorktrees,
     scanPath,
     isScanning,
+    isScanningFolders,
+    isScanningWorktrees,
+    isScanningCaches,
     isDeleting,
     canDelete,
     summary,
-    totalSize: availableSummary.totalSize,
+    totals,
+    totalsAreEstimate,
+    suggestions,
+    applySuggestion,
+    clearSelection,
+    folderScanTiming,
+    stopScan,
+    isStopping,
+    scanStopped,
+    folderListState,
+    worktreeListState,
+    listBuiltAt,
+    foldersListedAt,
     selectedWorktreesNeedingConsent,
     trayMismatch,
     removableWorktreeCount: windowCount,

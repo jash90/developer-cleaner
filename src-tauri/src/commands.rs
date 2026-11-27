@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+use crate::scan_cancel::{ScanToken, StopCheck, SCAN_STOPPED};
+
 use crate::build_artifacts::{artifact_rejection, candidate_kind, BuildArtifact};
 use crate::fs_size::{measure_dir, scan_dir, DirSize};
 
@@ -377,11 +379,12 @@ struct FoundPaths {
 
 impl FoundPaths {
     /// Keep only the build-artifact candidates that pass the full check, which asks Git and is
-    /// therefore run once per candidate, in parallel, after the walk.
-    fn confirmed(mut self) -> Self {
+    /// therefore run once per candidate, in parallel, after the walk. A stopped scan skips the
+    /// rest; its result is thrown away.
+    fn confirmed(mut self, stop: StopCheck) -> Self {
         self.build_artifacts = std::mem::take(&mut self.build_artifacts)
             .into_par_iter()
-            .filter(|path| artifact_rejection(path).is_none())
+            .filter(|path| !stop() && artifact_rejection(path).is_none())
             .collect();
         self
     }
@@ -397,7 +400,14 @@ fn find_node_modules_paths(scan_path: &Path) -> Vec<PathBuf> {
     find_cleanup_paths(scan_path).node_modules
 }
 
+#[cfg(test)]
 fn find_cleanup_paths(scan_path: &Path) -> FoundPaths {
+    find_cleanup_paths_until(scan_path, &|| false)
+}
+
+/// The walk, checking `stop` as it goes; a stopped walk returns whatever it had, which the
+/// caller discards.
+fn find_cleanup_paths_until(scan_path: &Path, stop: StopCheck) -> FoundPaths {
     if scan_path
         .file_name()
         .is_some_and(|name| name == "node_modules")
@@ -420,7 +430,7 @@ fn find_cleanup_paths(scan_path: &Path) -> FoundPaths {
             build_artifacts: vec![scan_path.to_path_buf()],
             ..FoundPaths::default()
         }
-        .confirmed();
+        .confirmed(stop);
     }
 
     // One walk per top-level folder, in parallel: a projects folder is many independent
@@ -444,21 +454,24 @@ fn find_cleanup_paths(scan_path: &Path) -> FoundPaths {
 
     let mut found = subtrees
         .par_iter()
-        .map(|subtree| find_in_subtree(subtree))
+        .map(|subtree| find_in_subtree(subtree, stop))
         .reduce(FoundPaths::default, |mut all, part| {
             all.extend(part);
             all
         });
     found.node_modules.sort();
     found.build_artifacts.sort();
-    found.confirmed()
+    found.confirmed(stop)
 }
 
-fn find_in_subtree(subtree: &Path) -> FoundPaths {
+fn find_in_subtree(subtree: &Path, stop: StopCheck) -> FoundPaths {
     let mut found = FoundPaths::default();
     let mut entries = WalkDir::new(subtree).same_file_system(true).into_iter();
 
     while let Some(entry) = entries.next() {
+        if stop() {
+            break;
+        }
         let Ok(entry) = entry else {
             continue;
         };
@@ -511,14 +524,24 @@ fn device_of(_path: &Path) -> Option<u64> {
 
 #[tauri::command]
 pub async fn scan_for_node_modules(path: String) -> Result<ScanResult, String> {
+    // Taken before the work starts, so only a stop sent while this scan runs can end it.
+    let token = ScanToken::current();
     // The walk and the size measurement are blocking filesystem work; running them on the
     // async runtime's worker would stall every other command while a large folder is scanned.
-    tauri::async_runtime::spawn_blocking(move || scan_for_node_modules_blocking(path))
-        .await
-        .map_err(|error| format!("Scan did not finish: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_for_node_modules_until(path, &move || token.is_cancelled())
+    })
+    .await
+    .map_err(|error| format!("Scan did not finish: {error}"))?
 }
 
+#[cfg(test)]
 fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
+    scan_for_node_modules_until(path, &|| false)
+}
+
+/// A stopped scan returns [`SCAN_STOPPED`], never a partial result.
+fn scan_for_node_modules_until(path: String, stop: StopCheck) -> Result<ScanResult, String> {
     let scan_path = Path::new(&path);
 
     if !scan_path.exists() {
@@ -531,12 +554,16 @@ fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
 
     // Keep only outermost node_modules directories. Their recursive size
     // already includes any dependency-level node_modules folders inside.
-    let found = find_cleanup_paths(scan_path);
+    let found = find_cleanup_paths_until(scan_path, stop);
+    if stop() {
+        return Err(SCAN_STOPPED.to_string());
+    }
     let node_modules_paths = found.node_modules;
 
     // Calculate sizes in parallel
     let folders: Vec<NodeModulesFolder> = node_modules_paths
         .par_iter()
+        .filter(|_| !stop())
         .map(|path| {
             let scan = scan_dir(path);
             let size = scan.size;
@@ -558,6 +585,7 @@ fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
     let build_artifacts: Vec<BuildArtifact> = found
         .build_artifacts
         .par_iter()
+        .filter(|_| !stop())
         .filter_map(|path| {
             let kind = candidate_kind(path)?;
             let scan = scan_dir(path);
@@ -572,6 +600,10 @@ fn scan_for_node_modules_blocking(path: String) -> Result<ScanResult, String> {
             })
         })
         .collect();
+
+    if stop() {
+        return Err(SCAN_STOPPED.to_string());
+    }
 
     let total_size: u64 = folders.iter().map(|f| f.size).sum();
     let total_allocated_size: u64 = folders.iter().map(|f| f.allocated_size).sum();
@@ -861,6 +893,40 @@ mod tests {
         ));
         fs::create_dir_all(&root).expect("fixture root should be created");
         root
+    }
+
+    #[test]
+    fn a_stopped_scan_returns_no_partial_result() {
+        let root = TestDirectory(temp_root("stopped-scan"));
+        fs::create_dir_all(root.0.join("app/node_modules/react")).expect("fixture");
+        fs::write(root.0.join("app/package.json"), "{}").expect("fixture");
+
+        let path = root.0.to_string_lossy().to_string();
+        let stopped = super::scan_for_node_modules_until(path.clone(), &|| true);
+        assert_eq!(stopped.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
+
+        let finished = super::scan_for_node_modules_until(path, &|| false).expect("scan");
+        assert_eq!(finished.folders.len(), 1);
+    }
+
+    #[test]
+    fn a_stop_partway_through_the_walk_returns_no_partial_result() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let root = TestDirectory(temp_root("stopped-midway"));
+        for project in ["one", "two", "three", "four"] {
+            fs::create_dir_all(root.0.join(project).join("node_modules/react")).expect("fixture");
+            fs::write(root.0.join(project).join("package.json"), "{}").expect("fixture");
+        }
+
+        // The first checks pass, so the walk has found something before the stop arrives.
+        let checks = AtomicUsize::new(0);
+        let stop = || checks.fetch_add(1, Ordering::SeqCst) >= 3;
+        let result =
+            super::scan_for_node_modules_until(root.0.to_string_lossy().to_string(), &stop);
+
+        assert_eq!(result.unwrap_err(), crate::scan_cancel::SCAN_STOPPED);
+        assert!(checks.load(Ordering::SeqCst) > 3);
     }
 
     fn delete_folders_blocking(paths: Vec<String>) -> Vec<super::DeleteResult> {

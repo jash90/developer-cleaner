@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Settings, TickDiagnostics } from '../types';
+import { shortenHome } from '../utils/categories';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -73,12 +74,6 @@ function BackgroundRefresh() {
       )}
     </section>
   );
-}
-
-function shortenHome(folder: string) {
-  // Purely cosmetic; the full path stays in the title attribute.
-  const match = /^\/Users\/[^/]+/.exec(folder) ?? /^\/home\/[^/]+/.exec(folder);
-  return match ? `~${folder.slice(match[0].length)}` : folder;
 }
 
 export function SettingsPanel({

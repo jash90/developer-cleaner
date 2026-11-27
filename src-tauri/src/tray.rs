@@ -105,11 +105,11 @@ pub struct TrayStats {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Volume {
-    name: String,
-    mount_point: PathBuf,
-    available: u64,
-    total: u64,
+pub(crate) struct Volume {
+    pub(crate) name: String,
+    pub(crate) mount_point: PathBuf,
+    pub(crate) available: u64,
+    pub(crate) total: u64,
 }
 
 /// Free space as Finder reports it, which is not what `df` prints.
@@ -118,7 +118,7 @@ struct Volume {
 /// accounts for purgeable space and lands a gigabyte or two away from `df`'s `statfs` view.
 /// Finder's number is the one a person recognises, so a mismatch with `df` is expected here,
 /// not a bug.
-fn read_volumes() -> Vec<Volume> {
+pub(crate) fn read_volumes() -> Vec<Volume> {
     Disks::new_with_refreshed_list()
         .list()
         .iter()
@@ -136,7 +136,7 @@ fn read_volumes() -> Vec<Volume> {
 /// Every path is under `/`, so matching any mount point is not enough — the answer is the
 /// *longest* mount point that is a prefix. On macOS `~/Projects` matches both `/` and
 /// `/System/Volumes/Data`, and only the latter is the volume whose free space will change.
-fn pick_volume<'a>(volumes: &'a [Volume], folder: &Path) -> Option<&'a Volume> {
+pub(crate) fn pick_volume<'a>(volumes: &'a [Volume], folder: &Path) -> Option<&'a Volume> {
     volumes
         .iter()
         .filter(|volume| folder.starts_with(&volume.mount_point))

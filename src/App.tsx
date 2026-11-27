@@ -1,59 +1,35 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useCleanup } from './hooks/useCleanup';
 import { useDevCaches } from './hooks/useDevCaches';
-import { FolderList } from './components/FolderList';
-import { WorktreeList } from './components/WorktreeList';
-import { BuildArtifactList } from './components/BuildArtifactList';
-import { CacheList } from './components/CacheList';
-import { SortControls } from './components/SortControls';
-import { SizeDisplay } from './components/SizeDisplay';
-import { ConfirmDialog } from './components/ConfirmDialog';
-import { SettingsPanel } from './components/SettingsPanel';
+import { useDiskSpace } from './hooks/useDiskSpace';
 import { useSettings } from './hooks/useSettings';
-import { formatSize } from './utils/formatSize';
+import { BuildFoldersPage } from './components/drilldown/BuildFoldersPage';
+import { CachesPage } from './components/drilldown/CachesPage';
+import { NodeModulesPage } from './components/drilldown/NodeModulesPage';
+import { WorktreesPage } from './components/drilldown/WorktreesPage';
+import { Banners } from './components/layout/Banners';
+import { SelectionBar } from './components/layout/SelectionBar';
+import { Toolbar } from './components/layout/Toolbar';
+import { Overview } from './components/overview/Overview';
+import type { HeroScan } from './components/overview/Hero';
+import { ReviewDrawer } from './components/review/ReviewDrawer';
+import { SettingsPanel } from './components/SettingsPanel';
+import type { View } from './components/view';
+import { CATEGORIES, shortenHome } from './utils/categories';
 
-function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" aria-hidden="true">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-    </svg>
-  );
-}
-
-function FolderIcon({ className }: { className: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-    </svg>
-  );
-}
-
-function BranchIcon({ className }: { className: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-      <circle cx="6" cy="5" r="2.25" strokeWidth="1.8" />
-      <circle cx="6" cy="19" r="2.25" strokeWidth="1.8" />
-      <circle cx="18" cy="7" r="2.25" strokeWidth="1.8" />
-      <path d="M6 7.5v9M8.25 17c5.6-.5 9.75-3.5 9.75-7.75" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function GearIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
+const PAGE_TITLES: Record<Exclude<View['page'], 'overview'>, string> = {
+  node: CATEGORIES.node.label,
+  build: CATEGORIES.build.label,
+  worktrees: CATEGORIES.worktrees.label,
+  caches: CATEGORIES.caches.label,
+};
 
 function App() {
   const caches = useDevCaches();
   const cleanup = useCleanup(caches);
   const settings = useSettings();
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [view, setView] = useState<View>({ page: 'overview' });
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const {
     nodeModules,
@@ -61,313 +37,178 @@ function App() {
     mergedWorktrees,
     scanPath,
     isScanning,
+    isScanningFolders,
+    isScanningWorktrees,
     isDeleting,
     canDelete,
     summary,
-    totalSize,
     selectedWorktreesNeedingConsent,
-    trayMismatch,
-    removableWorktreeCount,
-    errors,
-    lastReport,
   } = cleanup;
-  const needsConsent = selectedWorktreesNeedingConsent.length > 0;
+  const disk = useDiskSpace(scanPath, isScanning || isDeleting);
+  // Caches live under the home folder; they count toward the scanned volume only if it holds it.
+  const homeDisk = useDiskSpace(null, isScanning || isDeleting);
+  const cachesOnDiskVolume = disk !== null && homeDisk !== null && disk.mount_point === homeDisk.mount_point;
+  const projectSelectionDisabled = isDeleting || isScanning;
 
-  const confirmDelete = () => {
-    setShowConfirmDialog(false);
+  const closeReview = useCallback(() => setReviewOpen(false), []);
+  const confirmRemoval = () => {
+    setReviewOpen(false);
     void cleanup.deleteSelected();
   };
 
-  // Caches live at fixed locations, so this panel works before any folder is picked.
-  const cacheSection = (
-    <section className="bg-white rounded-lg border border-sky-200 shadow-sm overflow-hidden">
-      <CacheList
-        targets={caches.targets}
-        selectedPaths={caches.selectedIds}
-        warnings={caches.warnings}
-        isScanning={caches.isScanning}
-        onToggleSelection={caches.toggleSelection}
-        onSelectSafe={caches.selectSafe}
-        onDeselectAll={caches.deselectAll}
-        onScan={() => void caches.scan()}
-        prunedPaths={caches.prunedPaths}
-        selectionDisabled={isDeleting}
-      />
-      {caches.selectedIds.size > 0 && (
-        <div className="px-4 py-3 bg-sky-50/70 border-t border-sky-100 text-sm text-gray-600">
-          {caches.selectedIds.size} selected &middot;{' '}
-          <span className="font-medium text-green-700">
-            {formatSize(caches.selectedReclaimable)}
-          </span>{' '}
-          will be freed{caches.selectionHasEstimate ? ' at least — prune targets free an amount known only once they run' : ''}
-          {' '}&middot; removed with the rest by Remove Selected
-        </div>
-      )}
-      {caches.freedBytes > 0 && (
-        <div className="px-4 py-2 bg-green-50 border-t border-green-100 text-sm text-green-800">
-          Freed {formatSize(caches.freedBytes)}.
-          {caches.lastCleanup
-            .filter((result) => result.output)
-            .map((result) => (
-              <span key={result.path} className="block text-xs text-green-700 font-mono mt-0.5">
-                {result.output}
-              </span>
-            ))}
-        </div>
-      )}
-    </section>
-  );
+  const timing = cleanup.folderScanTiming;
+  // The folder walk is the long one, so its last duration is the estimate; once it is done,
+  // a worktree scan still running shows elapsed time only.
+  const heroScan: HeroScan | null = !timing || !(isScanningFolders || isScanningWorktrees)
+    ? null
+    : isScanningFolders
+      ? {
+        subject: isScanningWorktrees ? 'node_modules, build folders and merged worktrees' : 'node_modules and build folders',
+        startedAt: timing.startedAt,
+        expectedMs: timing.expectedMs,
+        onStop: cleanup.stopScan,
+        isStopping: cleanup.isStopping,
+      }
+      : {
+        subject: 'merged worktrees',
+        startedAt: timing.startedAt,
+        expectedMs: null,
+        onStop: cleanup.stopScan,
+        isStopping: cleanup.isStopping,
+      };
+
+  const selection = {
+    nodeModules: nodeModules.folders.filter((folder) => nodeModules.selectedPaths.has(folder.path)),
+    buildArtifacts: buildArtifacts.targets.filter((target) => buildArtifacts.selectedPaths.has(target.path)),
+    worktrees: mergedWorktrees.worktrees.filter((worktree) => mergedWorktrees.selectedPaths.has(worktree.path)),
+    caches: caches.targets.filter((target) => caches.selectedIds.has(target.path)),
+  };
+
+  const page = (() => {
+    switch (view.page) {
+      case 'overview':
+        return (
+          <Overview
+            cleanup={cleanup}
+            caches={caches}
+            disk={disk}
+            cachesOnVolume={cachesOnDiskVolume}
+            scan={heroScan}
+            scanLabel={scanPath ? shortenHome(scanPath) : null}
+            onNavigate={setView}
+            onChooseFolder={() => void cleanup.scan()}
+          />
+        );
+      case 'node':
+        return (
+          <NodeModulesPage
+            nodeModules={nodeModules}
+            scanPath={scanPath}
+            state={cleanup.folderListState}
+            selectionDisabled={projectSelectionDisabled}
+          />
+        );
+      case 'build':
+        return (
+          <BuildFoldersPage
+            buildArtifacts={buildArtifacts}
+            filter={view.filter}
+            listBuiltAt={cleanup.foldersListedAt}
+            scanPath={scanPath}
+            state={cleanup.folderListState}
+            selectionDisabled={projectSelectionDisabled}
+            onClearFilter={() => setView({ page: 'build', filter: null })}
+          />
+        );
+      case 'worktrees':
+        return (
+          <WorktreesPage
+            mergedWorktrees={mergedWorktrees}
+            total={cleanup.totals.worktrees}
+            trayMismatch={cleanup.trayMismatch}
+            state={cleanup.worktreeListState}
+            onRescan={() => void cleanup.rescan()}
+            busy={isScanning || isDeleting}
+            selectionDisabled={projectSelectionDisabled}
+          />
+        );
+      case 'caches':
+        return (
+          <CachesPage
+            caches={caches}
+            filter={view.filter}
+            selectionDisabled={isDeleting}
+            onClearFilter={() => setView({ page: 'caches', filter: null })}
+          />
+        );
+    }
+  })();
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between gap-6">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900">Developer Cleaner</h1>
-            <p className="text-sm text-gray-500">
-              Find and remove node_modules, build folders, merged Git worktrees and developer caches
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              aria-label="Settings"
-              title="Settings"
-              className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-            >
-              <GearIcon className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void cleanup.scan()}
-              disabled={isScanning || isDeleting}
-              className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {isScanning ? (
-                <>
-                  <Spinner />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <FolderIcon className="w-4 h-4" />
-                  Select Folder
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {lastReport && lastReport.length > 0 && (
-        <div className="bg-green-50 border-b border-green-200 px-6 py-3 flex items-start justify-between gap-4">
-          <ul className="text-green-800 text-sm space-y-0.5" aria-live="polite">
-            {lastReport.map((line) => <li key={line}>{line}</li>)}
-          </ul>
-          <button
-            type="button"
-            onClick={cleanup.clearReport}
-            className="text-green-600 hover:text-green-800"
-            aria-label="Dismiss cleanup summary"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {errors.length > 0 && (
-        <div className="bg-red-50 border-b border-red-200 px-6 py-3 flex items-start justify-between gap-4 max-h-60 overflow-y-auto">
-          <div className="text-red-700 text-sm space-y-2 min-w-0 break-words">
-            {errors.map((message) => (
-              <p key={message} className="whitespace-pre-line">{message}</p>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={cleanup.clearError}
-            className="text-red-500 hover:text-red-700"
-            aria-label="Dismiss error"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {scanPath && (
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-center gap-6 text-sm min-w-0">
-            <div className="min-w-0">
-              <span className="text-gray-500">Scanned: </span>
-              <span className="font-medium text-gray-900 truncate max-w-md inline-block align-bottom" title={scanPath}>
-                {scanPath}
-              </span>
-            </div>
-            <div className="whitespace-nowrap">
-              <span className="text-gray-500">Found: </span>
-              <span className="font-medium text-gray-900">
-                {nodeModules.folders.length} folders + {buildArtifacts.targets.length} build folders
-                {' '}+ {mergedWorktrees.worktrees.length} worktrees
-              </span>
-              {/* The number the menu bar shows, so the two can be compared at a glance. */}
-              <span className="text-gray-500"> ({removableWorktreeCount} removable)</span>
-            </div>
-            <div className="whitespace-nowrap">
-              <span className="text-gray-500">Reclaimable: </span>
-              <SizeDisplay bytes={totalSize} className="font-medium" />
-            </div>
-            <button
-              type="button"
-              onClick={() => void cleanup.rescan()}
-              disabled={isScanning || isDeleting}
-              className="ml-auto text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Rescan
-            </button>
-          </div>
-        </div>
-      )}
-
-      {trayMismatch && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between gap-4 text-sm">
-          <span className="text-amber-800">
-            The menu bar counts {trayMismatch.trayCount} removable worktree
-            {trayMismatch.trayCount === 1 ? '' : 's'} here, this list shows {trayMismatch.windowCount}.
-            {' '}Worktrees changed since the last scan — this list may be out of date.
-          </span>
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 text-[13px] overflow-hidden">
+      <Toolbar
+        pageTitle={view.page === 'overview' ? null : PAGE_TITLES[view.page]}
+        onBack={() => setView({ page: 'overview' })}
+        scanPath={scanPath}
+        isScanning={isScanning}
+        scanStopped={cleanup.scanStopped}
+        listBuiltAt={cleanup.listBuiltAt}
+        canRescan={!isScanning && !isDeleting}
+        canChooseFolder={!isScanning && !isDeleting}
+        onRescan={() => void cleanup.rescan()}
+        onChooseFolder={() => void cleanup.scan()}
+        onOpenSettings={() => setShowSettings(true)}
+      />
+      <Banners
+        report={cleanup.lastReport}
+        errors={cleanup.errors}
+        onDismissReport={cleanup.clearReport}
+        onDismissErrors={cleanup.clearError}
+      />
+      {/* The tray mismatch lives on the worktree page; elsewhere a short pointer leads there. */}
+      {cleanup.trayMismatch && view.page !== 'worktrees' && (
+        <div role="status" className="flex-none px-6 py-1.5 bg-amber-50 border-b border-amber-200 text-[12px] text-amber-900 flex items-center gap-3">
+          The menu bar counts {cleanup.trayMismatch.trayCount} removable worktrees here, this list shows
+          {' '}{cleanup.trayMismatch.windowCount}. The worktree list may be out of date.
           <button
             type="button"
             onClick={() => void cleanup.rescan()}
             disabled={isScanning || isDeleting}
-            className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
+            className="ml-auto h-6 px-2 rounded bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
           >
             Rescan now
           </button>
         </div>
       )}
+      <div className="flex-1 min-h-0 flex flex-col">{page}</div>
+      <SelectionBar
+        count={summary.totalCount}
+        size={summary.totalSize}
+        sizeIsEstimate={summary.hasEstimate}
+        dirtyCount={selectedWorktreesNeedingConsent.length}
+        isDeleting={isDeleting}
+        canReview={!isDeleting}
+        onClear={cleanup.clearSelection}
+        onReview={() => setReviewOpen(true)}
+      />
 
-      <main className="flex-1 overflow-y-auto p-6">
-        {!scanPath ? (
-          <div className="space-y-6 pb-2">
-            <div className="py-10 flex flex-col items-center justify-center text-gray-500">
-              <div className="flex items-center gap-3 mb-4">
-                <FolderIcon className="w-14 h-14 text-blue-200" />
-                <BranchIcon className="w-14 h-14 text-amber-300" />
-              </div>
-              <p className="text-lg font-medium text-gray-700 mb-1">No folder selected</p>
-              <p className="text-sm">Choose a folder to scan for node_modules, build folders and merged Git worktrees</p>
-              <p className="text-sm mt-1">Developer caches below need no folder — scan them any time.</p>
-            </div>
-            {cacheSection}
-          </div>
-        ) : isScanning ? (
-          <div className="min-h-full flex flex-col items-center justify-center text-gray-500">
-            <Spinner className="h-12 w-12 mb-4 text-blue-600" />
-            <p className="text-lg font-medium text-gray-700 mb-1">Scanning...</p>
-            <p className="text-sm">Looking for cleanup candidates</p>
-          </div>
-        ) : (
-          <div className="space-y-6 pb-2">
-            <section className="bg-white rounded-lg border border-blue-200 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between gap-4 py-3 px-4 bg-blue-50/70 border-b border-blue-100">
-                <div className="flex items-center gap-2">
-                  <FolderIcon className="w-4 h-4 text-blue-700" />
-                  <h2 className="font-medium text-gray-800">node_modules</h2>
-                  <span className="text-xs text-gray-500">({nodeModules.folders.length})</span>
-                </div>
-                <SortControls sortConfig={nodeModules.sortConfig} onSort={nodeModules.setSort} />
-              </div>
-              <FolderList
-                folders={nodeModules.folders}
-                selectedPaths={nodeModules.selectedPaths}
-                onToggleSelection={nodeModules.toggleSelection}
-                onSelectAll={nodeModules.selectAll}
-                onDeselectAll={nodeModules.deselectAll}
-                selectionDisabled={isDeleting || isScanning}
-              />
-            </section>
-
-            <section className="bg-white rounded-lg border border-orange-200 shadow-sm overflow-hidden">
-              <BuildArtifactList
-                artifacts={buildArtifacts.targets}
-                selectedPaths={buildArtifacts.selectedPaths}
-                onToggleSelection={buildArtifacts.toggleSelection}
-                onSetKindSelected={buildArtifacts.setKindSelected}
-                onDeselectAll={buildArtifacts.deselectAll}
-                selectionDisabled={isDeleting || isScanning}
-              />
-            </section>
-
-            <section className="bg-white rounded-lg border border-amber-200 shadow-sm overflow-hidden">
-              <WorktreeList
-                worktrees={mergedWorktrees.worktrees}
-                selectedPaths={mergedWorktrees.selectedPaths}
-                onToggleSelection={mergedWorktrees.toggleSelection}
-                onSelectAll={mergedWorktrees.selectAll}
-                onDeselectAll={mergedWorktrees.deselectAll}
-                blockedReasons={mergedWorktrees.blockedReasons}
-                selectionDisabled={isDeleting || isScanning}
-              />
-              {mergedWorktrees.diagnostics.length > 0 && (
-                <details className="border-t border-amber-100 px-4 py-2">
-                  <summary className="text-xs text-gray-500 cursor-pointer select-none">
-                    Base branches compared ({mergedWorktrees.diagnostics.length} repositories)
-                  </summary>
-                  <ul className="mt-2 space-y-1">
-                    {mergedWorktrees.diagnostics.map((note) => (
-                      <li key={note} className="text-[11px] text-gray-500 break-all">{note}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </section>
-
-            {cacheSection}
-          </div>
-        )}
-      </main>
-
-      {(summary.totalCount > 0 || isDeleting) && (
-        <footer className="bg-white border-t border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <span className="text-gray-500">Selected: </span>
-              <span className="font-medium text-gray-900">
-                {summary.totalCount} items
-              </span>
-              <span className="text-gray-300 mx-2">|</span>
-              <span className="text-gray-500">Space to free: </span>
-              <span className="font-medium text-green-600">
-                {summary.hasEstimate ? 'at least ' : ''}{formatSize(summary.totalSize)}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowConfirmDialog(true)}
-              disabled={!canDelete}
-              className="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {isDeleting ? (
-                <>
-                  <Spinner />
-                  Removing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Remove Selected
-                </>
-              )}
-            </button>
-          </div>
-        </footer>
-      )}
+      <ReviewDrawer
+        isOpen={reviewOpen}
+        selection={selection}
+        totalCount={summary.totalCount}
+        totalSize={summary.totalSize}
+        sizeIsEstimate={summary.hasEstimate}
+        needingConsent={selectedWorktreesNeedingConsent}
+        canDelete={canDelete}
+        onToggle={{
+          node: nodeModules.toggleSelection,
+          build: buildArtifacts.toggleSelection,
+          worktree: mergedWorktrees.toggleSelection,
+          cache: caches.toggleSelection,
+        }}
+        onConfirm={confirmRemoval}
+        onClose={closeReview}
+      />
 
       <SettingsPanel
         isOpen={showSettings}
@@ -380,30 +221,6 @@ function App() {
         onRemoveFolder={(folder) => void settings.removeFolder(folder)}
         onClose={() => setShowSettings(false)}
       />
-
-      <ConfirmDialog
-        isOpen={showConfirmDialog}
-        title="Remove selected items?"
-        description="node_modules folders are deleted permanently. Build folders are deleted like their tool's own clean: the next build or install recreates them, and anything kept only there (release binaries, bundles) goes with them. Worktree files, including ignored files and untracked OS/watcher junk, are removed; Git branches are kept. Entries whose directory is already gone only have their leftover Git registration pruned. Developer caches are re-downloaded on demand; entries with an official prune command are handed to that tool, which keeps whatever is still referenced, and logs are emptied in place."
-        items={summary.items}
-        confirmLabel={needsConsent ? 'Remove and discard changes' : 'Remove'}
-        selectedSize={summary.totalSize}
-        sizeIsEstimate={summary.hasEstimate}
-        warning={needsConsent ? {
-          message: `${selectedWorktreesNeedingConsent.length} worktree(s) have uncommitted changes. Those changes will be lost — they are not in any commit:`,
-          acknowledgement: selectedWorktreesNeedingConsent.length === 1
-            ? 'I understand the uncommitted changes in this worktree will be permanently lost.'
-            : `I understand the uncommitted changes in these ${selectedWorktreesNeedingConsent.length} worktrees will be permanently lost.`,
-          entries: selectedWorktreesNeedingConsent.map((worktree) => ({
-            key: worktree.path,
-            label: `${worktree.branch} · ${worktree.repository_name}`,
-            detail: worktree.path,
-          })),
-        } : null}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowConfirmDialog(false)}
-      />
-
     </div>
   );
 }
