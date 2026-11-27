@@ -1,6 +1,6 @@
 [package]
 name = "node-modules-cleaner"
-version = "1.8.0"
+version = "1.9.0"
 description = "A cross-platform desktop app that reclaims disk space from node_modules, build folders, merged Git worktrees and developer caches"
 authors = ["Bartłomiej Zimny"]
 license = "MIT"
